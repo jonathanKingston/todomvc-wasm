@@ -1,4 +1,5 @@
 #![feature(type_ascription)]
+#![feature(option_replace)]
 
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
@@ -6,7 +7,7 @@ use wasm_bindgen::JsCast;
 
 extern crate js_sys;
 extern crate web_sys;
-use std::rc::Rc;
+use std::rc::{Weak, Rc};
 use std::sync::Mutex;
 
 mod controller;
@@ -27,26 +28,40 @@ enum Message {
   View(ViewMessage)
 }
 
-struct Scheduler {
-    controller: RefCell<Controller>,
-    view: RefCell<View>,
-    events: RefCell<Vec<Message>>,
-    running: RefCell<bool>
-}
-
 fn dbg(message: &str) {
     let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
       web_sys::console::log_1(&v);
 }
 
+pub struct Scheduler {
+    controller: RefCell<Option<Weak<Controller>>>,
+    view: RefCell<Option<Weak<View>>>,
+    events: RefCell<Vec<Message>>,
+    running: RefCell<bool>
+}
+
 impl Scheduler {
-    fn new(view: View, controller: Controller) -> Scheduler {
+    fn new() -> Scheduler {
         Scheduler {
-            controller: RefCell::new(controller),
-            view: RefCell::new(view),
+            controller: RefCell::new(None),
+            view: RefCell::new(None),
             events: RefCell::new(Vec::new()),
             running: RefCell::new(false)
         }
+    }
+    fn set_controller(&self, controller: Rc<Controller>) {
+        let mut controller_data = self.controller.borrow_mut();
+        controller_data.replace(Rc::downgrade(&controller));
+    }
+    fn set_view(&self, view: Rc<View>) {
+        let mut view_data = self.view.borrow_mut();
+        view_data.replace(Rc::downgrade(&view));
+    }
+    fn setup(&self) {
+        //self.controller.borrow_mut().unwrap().set_sched(&self);
+        //if let Some(ref mut controller) = *self.controller.borrow_mut() {
+            //controller.set_sched(&self);
+        //}
     }
     fn add_message(&self, message: Message) {
                     let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
@@ -83,7 +98,7 @@ impl Scheduler {
                     web_sys::console::log_1(&v);
             {
                 let mut running = self.running.borrow_mut();
-                *running = false;
+                *running = true;
             }
                     let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 5"));
                     web_sys::console::log_1(&v);
@@ -99,8 +114,12 @@ impl Scheduler {
         if let Some(event) = event {
             match event {
                 Message::Controller(e) => {
-                    let mut controller = self.controller.borrow_mut(); // TODO use try_borrow
-                    controller.call(e);
+    // controller: RefCell<Option<Weak<Controller>>>,
+                    if let Some(ref ag) = *self.controller.borrow_mut() { // TODO use try_borrow
+                        if let Some(ref mut controller) = *ag.upgrade() {
+                            controller.call(e);
+                        }
+                    }
                 },
                 _ => println!("unsupported:"),
                 //Message::View(e) => self.view.call(e),
@@ -115,20 +134,22 @@ impl Scheduler {
 
 #[wasm_bindgen]
 pub fn run() {
+    let sched = Rc::new(Scheduler::new());
     //   App::new("todos-wasmbindgen");
     if let Some(window) = web_sys::window() {
         if let Some(document) = window.document() {
             if let Some(store) = Store::new("todos-wasmbindgen") {
-                let mut controller = Controller::new(store, None);
+                let mut controller = Controller::new(store, None, sched.clone());
                 if let Some(mut view) = View::new() {
                     // let template = new Template();
                     //const view = new View(template);
+let crc = Rc::new(controller);
+let vrc = Rc::new(view);
 
-                    let sched = Scheduler::new(view, controller);
+                    sched.set_controller(crc);
+                    sched.set_view(vrc);
                     sched.add_message(Message::Controller(ControllerMessage::AddItem("boop".into())));
-/*
-                    controller.set_sched(&sched);
-*/
+                    //sched.setup();
 
                     //let mut controller = Controller::new(store, view);
                     //view.set_controller(Box::new(&controller));

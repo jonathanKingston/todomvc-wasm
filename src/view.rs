@@ -1,7 +1,8 @@
 use crate::store::{ItemListSlice, ItemListTrait};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use crate::Scheduler;
 
 const ENTER_KEY: u32 = 13;
 const ESCAPE_KEY: u32 = 27;
@@ -34,6 +35,7 @@ fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
 }
 
 pub struct View {
+    sched: Option<Rc<Scheduler>>,
     todo_list: Element,
     todo_item_counter: Element,
     clear_completed: Element,
@@ -42,7 +44,7 @@ pub struct View {
     new_todo: Element,
 }
 
-impl View {
+impl  View  {
     pub fn new() -> Option<View> {
         let todo_list = Element::qs(".todo-list")?;
         let todo_item_counter = Element::qs(".todo-count")?;
@@ -51,6 +53,7 @@ impl View {
         let toggle_all = Element::qs(".toggle-all")?;
         let new_todo = Element::qs(".new-todo")?;
         let view = View {
+            sched: None,
             todo_list,
             todo_item_counter,
             clear_completed,

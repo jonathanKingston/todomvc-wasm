@@ -3,10 +3,12 @@ use crate::view::View;
 use js_sys::Date;
 use crate::Scheduler;
 
+use std::rc::{Weak, Rc};
+
 pub struct Controller {
     store: Store,
     view: Option<View>,
-//    sched: Option<Box<Scheduler>>,
+    sched: Option<Rc<Scheduler>>,
     active_route: String,
     last_active_route: String,
 }
@@ -16,12 +18,12 @@ pub enum ControllerMessage {
     SetPage(String),
 }
 
-impl Controller {
-    pub fn new(store: Store, view: Option<View>) -> Controller {
+impl  Controller {
+    pub fn new(store: Store, view: Option<View>, sched: Rc<Scheduler>) -> Controller {
         let mut controller = Controller {
             store,
             view,
-//            sched: None,
+            sched: Some(sched),
             active_route: "".into(),
             last_active_route: "".into(),
         };
@@ -47,8 +49,8 @@ impl Controller {
         controller
     }
 /*
-    pub fn set_sched(&mut self, sched: &Scheduler) {
-        self.sched = Some(Box::new(sched));
+    pub fn set_sched(&mut self, sched: Rc<Scheduler>) {
+        self.sched = Some(sched);
     }
 */
 
