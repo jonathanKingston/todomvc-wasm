@@ -1,10 +1,13 @@
 use js_sys::JSON;
 use wasm_bindgen::prelude::*;
+//use crate::DefinePropertyAttrs;
+// TODO remove
+fn dbg(mssg: &str) {
+    let v = wasm_bindgen::JsValue::from_str(&format!("{}", mssg));
+    web_sys::console::log_1(&v);
+}
 
 pub struct Store {
-    // TODO check signatures
-    //get_local_storage: FnMut() -> Vec<String>,
-    //set_local_storage: FnMut(Vec<String>) -> (),
     local_storage: web_sys::Storage,
     data: Option<ItemList>,
     name: String,
@@ -44,36 +47,20 @@ impl Store {
                 if let Ok(Some(iter)) = js_sys::try_iter(&data) {
                     for item in iter {
                         if let Ok(item) = item {
-                            let item: Option<&js_sys::Object> =
-                                wasm_bindgen::JsCast::dyn_ref(&item);
+                            let item: Option<&js_sys::Array> = wasm_bindgen::JsCast::dyn_ref(&item);
                             if let Some(item) = item {
-                                let mut temp_item = Item {
-                                    title: "".to_string(),
-                                    completed: false,
-                                    id: 0,
-                                };
-                                js_sys::Object::entries(item).for_each(&mut |x, _, _| {
-                                    let array: js_sys::Array = x.into();
-                                    array.shift().as_string().map(|v| match v.as_str() {
-                                        "title" => {
-                                            if let Some(v) = array.shift().as_string() {
-                                                temp_item.title = v;
-                                            }
+                                if let Some(title) = item.shift().as_string() {
+                                    if let Some(completed) = item.shift().as_bool() {
+                                        if let Some(id) = item.shift().as_f64() {
+                                            let mut temp_item = Item {
+                                                title,
+                                                completed,
+                                                id: id as usize,
+                                            };
+                                            item_list.push(temp_item);
                                         }
-                                        "completed" => {
-                                            if let Some(v) = array.shift().as_bool() {
-                                                temp_item.completed = v;
-                                            }
-                                        }
-                                        "id" => {
-                                            if let Some(v) = array.shift().as_f64() {
-                                                temp_item.id = v as usize;
-                                            }
-                                        }
-                                        _ => {}
-                                    });
-                                });
-                                item_list.push(temp_item);
+                                    }
+                                }
                             }
                         }
                     }
@@ -87,34 +74,65 @@ impl Store {
     /// Write the local ItemList to localStorage.
     /// @param {ItemList} todos Array of todos to write
     fn set_local_storage(&mut self, todos: ItemList) {
+        /*
         fn define_property(object: &js_sys::Object, key: &str, val: JsValue) {
-            let descriptor = js_sys::Object::new();
-            if let Some(val) = wasm_bindgen::JsCast::dyn_ref(&val): Option<&js_sys::Object> {
-                js_sys::Object::define_property(&descriptor, &JsValue::from("value"), val);
+    let value = DefinePropertyAttrs::from(JsValue::from(js_sys::Object::new()));
+    value.set_value(&val);
+    let descriptor = js_sys::Object::from(JsValue::from(value));
+/*
+    let foo = foo_42();
+    let foo = Object::define_property(&foo, &"bar".into(), &descriptor);
+    assert!(foo.has_own_property(&"bar".into()));
+*/
+
+ //           let prototype: js_sys::Object = wasm_bindgen::JsValue::null().into();
+  //          let descriptor = js_sys::Object::create(&prototype);
+dbg("got here ---*q1");
+web_sys::console::log_2(&val, &JsValue::from(key));
+//let val: js_sys::Object = val.into();
+// TODO below doesn't work val isn't a object it seems
+dbg("got here ---*d2");
+            //if let Some(val) = wasm_bindgen::JsCast::dyn_ref(&val): Option<&js_sys::Object> {
+   //      let val = wasm_bindgen::JsCast::unchecked_ref(&val): &js_sys::Object;
+          //let val = js_sys::Object::from(JsValue::from(val));
+dbg("got here ---n3");
+     //           js_sys::Object::define_property(&descriptor, &JsValue::from("value"), &val);
+dbg("got here ---*a4");
                 js_sys::Object::define_property(object, &key.into(), &descriptor);
-            }
+         //   }
         }
+*/
         let array = js_sys::Array::new();
         for item in todos.iter() {
-            let mut object = js_sys::Object::new();
-
-            define_property(&mut object, "title", JsValue::from(item.title.clone()));
+            dbg("got here 99 {");
+            let mut child = js_sys::Array::new();
+            //let mut object = js_sys::Object::new();
+            let s = String::from(item.title.clone());
+            child.push(&JsValue::from(&s));
+            child.push(&JsValue::from(item.completed));
+            child.push(&JsValue::from(item.id as f64));
+            /*
+            define_property(&mut object, "title", JsValue::from(&s));
             define_property(&mut object, "completed", JsValue::from(item.completed));
             define_property(&mut object, "id", JsValue::from(item.id as f64));
-
             array.push(&JsValue::from(object));
+*/
+            array.push(&JsValue::from(child));
+
+            dbg("got here 99 }");
         }
+        //web_sys::console::log_1(&JsValue::from(array));
         if let Ok(storage_string) = JSON::stringify(&JsValue::from(array)) {
             let storage_string: String = storage_string.to_string().into();
+            dbg(&storage_string);
             self.local_storage
                 .set_item(&self.name, storage_string.as_str());
             self.data = Some(todos);
         }
     }
 
-    /**
-     * Find items with properties matching those on query.
-     *
+    /// Find items with properties matching those on query.
+    /*
      * @param {ItemQuery} query Query to match
      * @param {function(ItemList)} callback Called when the query is done
      *
@@ -132,9 +150,8 @@ impl Store {
         }
     }
 
+    /// Update an item in the Store.
     /**
-     * Update an item in the Store.
-     *
      * @param {ItemUpdate} update Record with an id and a property to update
      * @param {function()} [callback] Called when partialRecord is applied
      */
@@ -154,17 +171,10 @@ impl Store {
                 }).collect();
             self.set_local_storage(todos);
         });
-
-        /* isn't this async?
-		if (callback) {
-			callback();
-		}
-*/
     }
 
+    /// Insert an item into the Store.
     /**
-     * Insert an item into the Store.
-     *
      * @param {Item} item Item to insert
      * @param {function()} [callback] Called when item is inserted
      */
@@ -278,6 +288,7 @@ pub struct ItemListSlice<'a> {
 }
 impl<'a> ItemListSlice<'a> {
     /*
+TODO implement?
     fn new(boxed_slice: Box<[&'a Item]>) -> ItemListSlice<'a> {
         ItemListSlice { list: boxed_slice }
     }
@@ -309,6 +320,23 @@ impl<'a> FromIterator<&'a Item> for ItemListSlice<'a> {
         c
     }
 }
+impl<'a> Into<ItemList> for ItemListSlice<'a> {
+    fn into(self) -> ItemList {
+        let mut i = ItemList::new();
+        let items = self.list.into_iter();
+        for j in items {
+            // TODO neaten this cloning?
+            let item = Item {
+                id: j.id,
+                completed: j.completed,
+                title: j.title.clone(),
+            };
+            i.push(item);
+        }
+        i
+    }
+}
+
 pub enum ItemQuery {
     Id { id: usize },
     Completed { completed: bool },

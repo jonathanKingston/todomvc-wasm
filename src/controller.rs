@@ -1,15 +1,19 @@
 use crate::store::*;
 use crate::view::{View, ViewMessage};
+use crate::{Message, Scheduler};
 use js_sys::Date;
-use crate::{Scheduler, Message};
 
-use std::rc::{Weak, Rc};
 use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+
+fn dbg(message: &str) {
+    let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
+    web_sys::console::log_1(&v);
+}
 
 pub struct Controller {
     store: Store,
     view: Option<View>,
-//    app: RefCell<Option<Weak<App>>>,
     sched: RefCell<Option<Weak<Scheduler>>>,
     active_route: String,
     last_active_route: String,
@@ -18,6 +22,7 @@ pub struct Controller {
 pub enum ControllerMessage {
     AddItem(String),
     SetPage(String),
+    EditItemSave(usize, String),
 }
 
 impl Controller {
@@ -29,7 +34,7 @@ impl Controller {
             active_route: "".into(),
             last_active_route: "".into(),
         };
-/*
+        /*
         if let Some(ref mut view) = controller.view {
             view.bind_edit_item_save(|a, b| {
                 controller.edit_item_save(a.into(), b.to_string());
@@ -61,6 +66,7 @@ impl Controller {
         match method_name {
             AddItem(title) => self.add_item(title),
             SetPage(hash) => self.set_page(hash),
+            EditItemSave(id, value) => self.edit_item_save(id, value),
         }
     }
 
@@ -171,20 +177,28 @@ impl Controller {
                 "active" => ItemQuery::Completed { completed: false },
                 _ => ItemQuery::EmptyItemQuery,
             };
-            if let Some(res) = self.store.find(query) {
-/*
-                if let Some(ref mut view) = self.view {
-                    view.show_items(res);
+            let mut v = None;
+            {
+                let store = &mut self.store;
+                if let Some(res) = store.find(query) {
+                    v = Some(res.into());
                 }
-*/
-                //self.add_message(ViewMessage::ShowItems(res));
+            }
+            if let Some(res) = v {
+                self.add_message(ViewMessage::ShowItems(res));
             }
         }
 
         if let Some((total, active, completed)) = self.store.count() {
+            dbg("heyee4");
             self.add_message(ViewMessage::SetItemsLeft(active));
-            self.add_message(ViewMessage::SetClearCompletedButtonVisibility(completed > 0));
+            dbg("heyee3");
+            self.add_message(ViewMessage::SetClearCompletedButtonVisibility(
+                completed > 0,
+            ));
+            dbg("heyee2");
             self.add_message(ViewMessage::SetCompleteAllCheckbox(completed == total));
+            dbg("heyee 1");
             self.add_message(ViewMessage::SetMainVisibility(total > 0));
         }
 

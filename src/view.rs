@@ -1,9 +1,10 @@
+use crate::controller::ControllerMessage;
 use crate::store::{ItemList, ItemListSlice, ItemListTrait};
-use std::rc::{Rc, Weak};
+use crate::{Message, Scheduler};
 use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use crate::Scheduler;
 
 const ENTER_KEY: u32 = 13;
 const ESCAPE_KEY: u32 = 27;
@@ -16,6 +17,10 @@ pub enum ViewMessage {
     SetClearCompletedButtonVisibility(bool),
     SetCompleteAllCheckbox(bool),
     SetMainVisibility(bool),
+}
+fn dbg(message: &str) {
+    let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
+    web_sys::console::log_1(&v);
 }
 
 fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
@@ -55,7 +60,7 @@ pub struct View {
     new_todo: Element,
 }
 
-impl  View  {
+impl View {
     pub fn new(sched: Weak<Scheduler>) -> Option<View> {
         let todo_list = Element::qs(".todo-list")?;
         let todo_item_counter = Element::qs(".todo-count")?;
@@ -63,7 +68,7 @@ impl  View  {
         let main = Element::qs(".main")?;
         let toggle_all = Element::qs(".toggle-all")?;
         let new_todo = Element::qs(".new-todo")?;
-        let view = View {
+        let mut view = View {
             sched: RefCell::new(Some(sched)),
             todo_list,
             todo_item_counter,
@@ -73,29 +78,28 @@ impl  View  {
             new_todo,
         };
 
-        /* TODO fixed mixed mutability
         view.todo_list.delegate(
             "li label",
             "dblclick",
             |e: web_sys::Event| {
                 if let Some(target) = e.target() {
                     if let Ok(el) = wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(target) {
-                        view.edit_item(el);
+                        dbg("heyyy");
+                        // view.edit_item(el);
                     }
                 }
             },
             false,
         );
+        /*
+        view.bind_edit_item_save(|a, b| {
+ 
+        });
 */
 
         Some(view)
     }
 
-    /*
-    pub fn set_controller(&mut self, controller: Box<&'a Controller<'a>>) {
-        self.controller = Some(controller);
-    }
-*/
     pub fn call(&mut self, method_name: ViewMessage) {
         use self::ViewMessage::*;
         match method_name {
@@ -103,9 +107,19 @@ impl  View  {
             ClearNewTodo() => self.clear_new_todo(),
             ShowItems(item_list) => self.show_items(item_list),
             SetItemsLeft(count) => self.set_items_left(count),
-            SetClearCompletedButtonVisibility(visible) => self.set_clear_completed_button_visibility(visible),
+            SetClearCompletedButtonVisibility(visible) => {
+                self.set_clear_completed_button_visibility(visible)
+            }
             SetCompleteAllCheckbox(complete) => self.set_complete_all_checkbox(complete),
             SetMainVisibility(complete) => self.set_main_visibility(complete),
+        }
+    }
+
+    fn add_message(&self, controller_message: ControllerMessage) {
+        if let Some(ref sched) = *self.sched.borrow_mut() {
+            if let Some(sched) = sched.upgrade() {
+                sched.add_message(Message::Controller(controller_message));
+            }
         }
     }
 
@@ -141,8 +155,11 @@ impl  View  {
 
     /// Populate the todo list with a list of items.
     pub fn show_items(&self, items: ItemList) {
+        dbg("shhhhh");
         // TODO what is items?
         if let Some(ref el) = self.todo_list.el {
+            dbg("itemss");
+            // dbg(&Template::item_list(items));
             el.set_inner_html(&Template::item_list(items));
         }
     }
@@ -173,15 +190,15 @@ impl  View  {
     /// Set the visibility of the "Clear completed" button.
     pub fn set_clear_completed_button_visibility(&self, visible: bool) {
         if let Some(ref clear_completed) = self.clear_completed.el {
+            dbg("got a button!");
             set_visibility(clear_completed, visible);
         }
     }
 
     /// Set the visibility of the main content and footer.
     pub fn set_main_visibility(&self, visible: bool) {
-        //  let value = if visible == true { "block" } else { "none" };
-        //	self.main.style().set_property("display", value)
         if let Some(ref main) = self.main.el {
+            dbg("got a main!");
             set_visibility(main, visible);
         }
     }
@@ -278,7 +295,7 @@ impl  View  {
                     let v = input_el.value(); // TODO remove with nll
                     let title = v.trim();
                     if title != "" {
-                        handler(title.clone());
+                        handler(&title);
                     }
                 }
             }
@@ -349,7 +366,7 @@ impl  View  {
         self.todo_list.delegate(
             ".destroy",
             "click",
-            |e: web_sys::Event| {
+            move |e: web_sys::Event| {
                 //TODO |{target}| {
                 if let Some(target) = e.target() {
                     handler(item_id(&target));
@@ -361,12 +378,12 @@ impl  View  {
 
     fn bind_toggle_item<T>(&mut self, handler: T)
     where
-        T: Fn(Option<usize>, bool) -> (),
+        T: 'static + Fn(Option<usize>, bool) -> (),
     {
         self.todo_list.delegate(
             ".toggle",
             "click",
-            |e: web_sys::Event| {
+            move |e: web_sys::Event| {
                 // TODO |{target}| {
                 if let Some(target) = e.target() {
                     if let Some(input_el) =
@@ -382,8 +399,14 @@ impl  View  {
 
     pub fn bind_edit_item_save<T>(&mut self, mut handler: T)
     where
-        T: FnMut(usize, &str) -> (),
+        T: 'static + FnMut(usize, &str) -> (),
     {
+        /*
+let mut handler = |id, value| {
+    self.add_message(ControllerMessage::EditItemSave(id, value));
+};
+        let handler = move || self.add_message;
+*/
         self.todo_list.delegate(
             "li .edit",
             "blur",
@@ -398,7 +421,8 @@ impl  View  {
                                 wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                             {
                                 if let Some(item) = item_id(&target) {
-                                    handler(item, input_el.value().trim());
+                                    //self.add_message(ControllerMessage::EditItemSave(item, input_el.value()));
+                                    //                         handler(item, input_el.value().trim());
                                 }
                             }
                         }
@@ -431,12 +455,12 @@ impl  View  {
 
     fn bind_edit_item_cancel<T>(&mut self, handler: T)
     where
-        T: Fn(Option<usize>) -> (),
+        T: 'static + Fn(Option<usize>) -> (),
     {
         self.todo_list.delegate(
             "li .edit",
             "keyup",
-            |e: web_sys::Event| {
+            move |e: web_sys::Event| {
                 if let Some(key_e) = wasm_bindgen::JsCast::dyn_ref::<web_sys::KeyboardEvent>(&e) {
                     if key_e.key_code() == ESCAPE_KEY {
                         if let Some(target) = e.target() {
@@ -518,10 +542,10 @@ impl Element {
         // element: Element,
         selector: &'static str,
         event: &str,
-        handler: T,
+        mut handler: T,
         use_capture: bool,
     ) where
-        T: FnMut(web_sys::Event) -> (),
+        T: 'static + FnMut(web_sys::Event) -> (),
     {
         let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
             if let Some(target_element) = event.target() {
@@ -540,6 +564,7 @@ impl Element {
 
                         if has_match {
                             //handler.call(target_element, event);
+                            handler(event);
                         }
                     }
                 }
@@ -597,7 +622,7 @@ impl Element {
 fn set_visibility(el: &web_sys::Element, visible: bool) {
     let dyn_el: Option<&web_sys::HtmlElement> = wasm_bindgen::JsCast::dyn_ref(el);
     if let Some(el) = dyn_el {
-        el.set_hidden(visible);
+        el.set_hidden(!visible);
     }
 }
 
@@ -605,7 +630,8 @@ fn create_element(tag: &str) -> Option<web_sys::Element> {
     web_sys::window()?.document()?.create_element(tag).ok()
 }
 
-fn escape_html(val: &str) -> &str {
+fn escape_html(val: String) -> String {
+    // TODO escape me!
     val
 }
 // export const escapeForHTML = s => s.replace(/[&<]/g, c => c === '&' ? '&amp;' : '&lt;');
@@ -629,16 +655,24 @@ impl Template {
     fn item_list(items: ItemList) -> String {
         let mut output = String::from("");
         for item in items.iter() {
-            output.push_str(
+            let completed_class = if item.completed {
+                "class=\"completed\""
+            } else {
+                ""
+            };
+            let checked = if item.completed { "checked" } else { "" };
+            let title = escape_html(item.title.clone());
+            output.push_str(&format!(
                 r#"
-  <li data-id="${item.id}"${item.completed ? ' class="completed"' : ''}>
+  <li data-id="{}"{}>
   	<div class="view">
-  		<input class="toggle" type="checkbox" ${item.completed ? 'checked' : ''}>
-  		<label>${escapeForHTML(item.title)}</label>
+  		<input class="toggle" type="checkbox" {}>
+  		<label>{}</label>
   		<button class="destroy"></button>
   	</div>
   </li>"#,
-            );
+                item.id, completed_class, checked, title
+            ));
         }
         return output;
     }
