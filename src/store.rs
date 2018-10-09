@@ -236,7 +236,7 @@ pub trait ItemListTrait<T> {
     fn iter(&self) -> std::slice::Iter<T>;
 }
 
-struct ItemList {
+pub struct ItemList {
     list: Vec<Item>,
 }
 impl ItemList {

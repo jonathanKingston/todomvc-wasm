@@ -8,6 +8,7 @@ use wasm_bindgen::JsCast;
 extern crate js_sys;
 extern crate web_sys;
 use std::rc::{Weak, Rc};
+use std::cell::RefCell;
 use std::sync::Mutex;
 
 mod controller;
@@ -15,27 +16,44 @@ mod store;
 mod view;
 use crate::controller::{Controller, ControllerMessage};
 use crate::store::Store;
-use crate::view::View;
+use crate::view::{View, ViewMessage};
 
 
-use std::cell::RefCell;
-
-enum ViewMessage {
-}
-
-enum Message {
+pub enum Message {
   Controller(ControllerMessage),
   View(ViewMessage)
 }
 
 fn dbg(message: &str) {
     let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
-      web_sys::console::log_1(&v);
+    web_sys::console::log_1(&v);
 }
 
+/*
+pub struct App {
+    scheduler: RefCell<Option<Scheduler>>,
+}
+
+impl App {
+    fn new(store: String) -> Option<App> {
+        let store = Store::new("todos-wasmbindgen").Ok()?;
+        let sched = Scheduler::new(app);
+        let controller = Controller::new(store, None);
+        let view = View::new().ok()?;
+        let app = App {
+            controller: RefCell::new(None),
+            view: RefCell::new(None),
+            scheduler: RefCell::new(None),
+        };
+        app 
+    }
+}
+*/
+
 pub struct Scheduler {
-    controller: RefCell<Option<Weak<Controller>>>,
-    view: RefCell<Option<Weak<View>>>,
+    controller: Rc<RefCell<Option<Controller>>>,
+    view: Rc<RefCell<Option<View>>>,
+    //app: RefCell<Option<App>>,
     events: RefCell<Vec<Message>>,
     running: RefCell<bool>
 }
@@ -43,25 +61,38 @@ pub struct Scheduler {
 impl Scheduler {
     fn new() -> Scheduler {
         Scheduler {
-            controller: RefCell::new(None),
-            view: RefCell::new(None),
+            //app: Box::new(app),
+            controller: Rc::new(RefCell::new(None)),
+            view: Rc::new(RefCell::new(None)),
             events: RefCell::new(Vec::new()),
             running: RefCell::new(false)
         }
     }
-    fn set_controller(&self, controller: Rc<Controller>) {
+    fn set_controller(&self, controller: Controller) {
         let mut controller_data = self.controller.borrow_mut();
+        controller_data.replace(controller);
+/*
         controller_data.replace(Rc::downgrade(&controller));
+        self.controller = Some(controller);
+*/
     }
-    fn set_view(&self, view: Rc<View>) {
+    fn set_view(&self, view: View) {
         let mut view_data = self.view.borrow_mut();
-        view_data.replace(Rc::downgrade(&view));
+        view_data.replace(view);
+/*
+        self.view = Some(view);
+*/
     }
     fn setup(&self) {
         //self.controller.borrow_mut().unwrap().set_sched(&self);
-        //if let Some(ref mut controller) = *self.controller.borrow_mut() {
-            //controller.set_sched(&self);
-        //}
+/*
+        let schedrc = Rc::new(self);
+                     if let Some(ref mut controller) = *sched.controller.borrow_mut() {
+                       controller.set_sched(Rc::downgrade(&schedrc));
+*/
+        if let Some(ref mut controller) = *self.controller.borrow_mut() {
+      //      controller.set_sched(Rc::downgrade(&Rc::new(*self)));
+        }
     }
     fn add_message(&self, message: Message) {
                     let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
@@ -84,24 +115,18 @@ impl Scheduler {
         {
             events_len = self.events.borrow().len().clone(); // TODO use try_borrow
         }
-                    let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 1"));
-                    web_sys::console::log_1(&v);
-                    let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 2"));
-                    web_sys::console::log_1(&v);
+        dbg("run 1");
         if events_len == 0 {
-                    let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 3"));
-                    web_sys::console::log_1(&v);
+            dbg("run 3");
             let mut running = self.running.borrow_mut();
             *running = false;
         } else {
-                    let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 4"));
-                    web_sys::console::log_1(&v);
+            dbg("run 4");
             {
                 let mut running = self.running.borrow_mut();
                 *running = true;
             }
-                    let v = wasm_bindgen::JsValue::from_str(&format!("{}", "run 5"));
-                    web_sys::console::log_1(&v);
+            dbg("run 5");
             self.next_message();
         }
     }
@@ -114,15 +139,15 @@ impl Scheduler {
         if let Some(event) = event {
             match event {
                 Message::Controller(e) => {
-    // controller: RefCell<Option<Weak<Controller>>>,
-                    if let Some(ref ag) = *self.controller.borrow_mut() { // TODO use try_borrow
-                        if let Some(ref mut controller) = *ag.upgrade() {
-                            controller.call(e);
-                        }
+                    if let Some(ref mut ag) = *self.controller.borrow_mut() { // TODO use try_borrow
+                        ag.call(e);
                     }
                 },
-                _ => println!("unsupported:"),
-                //Message::View(e) => self.view.call(e),
+                Message::View(e) => {
+                    if let Some(ref mut ag) = *self.view.borrow_mut() { // TODO use try_borrow
+                        ag.call(e);
+                    }
+                },
             }
             self.run();
         } else {
@@ -132,24 +157,63 @@ impl Scheduler {
     }
 }
 
+fn app(name: &str) -> Option<()> {
+    use std::borrow::Borrow;
+    let mut sched = Rc::new(Scheduler::new());
+    let store = Store::new(name)?;
+    let controller = Controller::new(store, None, Rc::downgrade(&sched));
+    let view = View::new(Rc::downgrade(&sched))?;
+    let sch: &Rc<Scheduler> = sched.borrow();
+    sch.set_view(view);
+    sch.set_controller(controller);
+/*
+    if let Some(r) = Rc::get_mut(&mut sched) {
+panic!("sss rr");
+        r.set_controller(controller);
+        r.set_view(view);
+    }
+*/
+/*
+    let x_sched = Rc::into_raw(sched);
+    unsafe {
+        let mut x = Rc::from_raw(x_sched);
+        x.set_controller(controller);
+    }
+*/
+    //sched.set_controller(controller);
+    //sched.set_view(view);
+    sched.add_message(Message::Controller(ControllerMessage::AddItem("boop".into())));
+    sched.add_message(Message::Controller(ControllerMessage::SetPage("".to_string())));
+    Some(())
+}
+
 #[wasm_bindgen]
 pub fn run() {
-    let sched = Rc::new(Scheduler::new());
-    //   App::new("todos-wasmbindgen");
+    app("todos-wasmbindgen");
+/*
     if let Some(window) = web_sys::window() {
         if let Some(document) = window.document() {
+
             if let Some(store) = Store::new("todos-wasmbindgen") {
-                let mut controller = Controller::new(store, None, sched.clone());
+                let mut controller = Controller::new(store, None);
                 if let Some(mut view) = View::new() {
                     // let template = new Template();
                     //const view = new View(template);
-let crc = Rc::new(controller);
-let vrc = Rc::new(view);
+//let crc = Rc::new(controller);
+//let vrc = Rc::new(view);
 
-                    sched.set_controller(crc);
-                    sched.set_view(vrc);
+                    sched.set_controller(controller);
+                    sched.set_view(view);
                     sched.add_message(Message::Controller(ControllerMessage::AddItem("boop".into())));
-                    //sched.setup();
+/*
+                    {
+                    let schedrc = Rc::new(sched);
+                     if let Some(ref mut controller) = *sched.controller.borrow_mut() {
+                       controller.set_sched(Rc::downgrade(&schedrc));
+                     }
+                    }
+*/
+                    sched.setup();
 
                     //let mut controller = Controller::new(store, view);
                     //view.set_controller(Box::new(&controller));
@@ -178,6 +242,7 @@ let vrc = Rc::new(view);
             }
         }
     }
+*/
 }
 
 /*

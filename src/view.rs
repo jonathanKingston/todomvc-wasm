@@ -1,11 +1,22 @@
-use crate::store::{ItemListSlice, ItemListTrait};
+use crate::store::{ItemList, ItemListSlice, ItemListTrait};
 use std::rc::{Rc, Weak};
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use crate::Scheduler;
 
 const ENTER_KEY: u32 = 13;
 const ESCAPE_KEY: u32 = 27;
+
+pub enum ViewMessage {
+    UpdateFilterButtons(String),
+    ClearNewTodo(),
+    ShowItems(ItemList),
+    SetItemsLeft(usize),
+    SetClearCompletedButtonVisibility(bool),
+    SetCompleteAllCheckbox(bool),
+    SetMainVisibility(bool),
+}
 
 fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
     //TODO ugly reformat
@@ -35,7 +46,7 @@ fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
 }
 
 pub struct View {
-    sched: Option<Rc<Scheduler>>,
+    sched: RefCell<Option<Weak<Scheduler>>>,
     todo_list: Element,
     todo_item_counter: Element,
     clear_completed: Element,
@@ -45,7 +56,7 @@ pub struct View {
 }
 
 impl  View  {
-    pub fn new() -> Option<View> {
+    pub fn new(sched: Weak<Scheduler>) -> Option<View> {
         let todo_list = Element::qs(".todo-list")?;
         let todo_item_counter = Element::qs(".todo-count")?;
         let clear_completed = Element::qs(".clear-completed")?;
@@ -53,7 +64,7 @@ impl  View  {
         let toggle_all = Element::qs(".toggle-all")?;
         let new_todo = Element::qs(".new-todo")?;
         let view = View {
-            sched: None,
+            sched: RefCell::new(Some(sched)),
             todo_list,
             todo_item_counter,
             clear_completed,
@@ -85,6 +96,18 @@ impl  View  {
         self.controller = Some(controller);
     }
 */
+    pub fn call(&mut self, method_name: ViewMessage) {
+        use self::ViewMessage::*;
+        match method_name {
+            UpdateFilterButtons(route) => self.update_filter_buttons(route),
+            ClearNewTodo() => self.clear_new_todo(),
+            ShowItems(item_list) => self.show_items(item_list),
+            SetItemsLeft(count) => self.set_items_left(count),
+            SetClearCompletedButtonVisibility(visible) => self.set_clear_completed_button_visibility(visible),
+            SetCompleteAllCheckbox(complete) => self.set_complete_all_checkbox(complete),
+            SetMainVisibility(complete) => self.set_main_visibility(complete),
+        }
+    }
 
     /// Put an item into edit mode.
     fn edit_item(&self, target: web_sys::Element) {
@@ -117,7 +140,7 @@ impl  View  {
     }
 
     /// Populate the todo list with a list of items.
-    pub fn show_items(&self, items: ItemListSlice) {
+    pub fn show_items(&self, items: ItemList) {
         // TODO what is items?
         if let Some(ref el) = self.todo_list.el {
             el.set_inner_html(&Template::item_list(items));
@@ -603,7 +626,7 @@ impl Template {
      *	completed: false,
      * })
      */
-    fn item_list(items: ItemListSlice) -> String {
+    fn item_list(items: ItemList) -> String {
         let mut output = String::from("");
         for item in items.iter() {
             output.push_str(

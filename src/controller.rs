@@ -1,14 +1,16 @@
 use crate::store::*;
-use crate::view::View;
+use crate::view::{View, ViewMessage};
 use js_sys::Date;
-use crate::Scheduler;
+use crate::{Scheduler, Message};
 
 use std::rc::{Weak, Rc};
+use std::cell::RefCell;
 
 pub struct Controller {
     store: Store,
     view: Option<View>,
-    sched: Option<Rc<Scheduler>>,
+//    app: RefCell<Option<Weak<App>>>,
+    sched: RefCell<Option<Weak<Scheduler>>>,
     active_route: String,
     last_active_route: String,
 }
@@ -18,12 +20,12 @@ pub enum ControllerMessage {
     SetPage(String),
 }
 
-impl  Controller {
-    pub fn new(store: Store, view: Option<View>, sched: Rc<Scheduler>) -> Controller {
+impl Controller {
+    pub fn new(store: Store, view: Option<View>, sched: Weak<Scheduler>) -> Controller {
         let mut controller = Controller {
             store,
             view,
-            sched: Some(sched),
+            sched: RefCell::new(Some(sched)),
             active_route: "".into(),
             last_active_route: "".into(),
         };
@@ -48,11 +50,6 @@ impl  Controller {
 
         controller
     }
-/*
-    pub fn set_sched(&mut self, sched: Rc<Scheduler>) {
-        self.sched = Some(sched);
-    }
-*/
 
     /// Take ownership of the view
     pub fn set_view(&mut self, view: View) {
@@ -67,19 +64,23 @@ impl  Controller {
         }
     }
 
+    fn add_message(&self, view_message: ViewMessage) {
+        if let Some(ref sched) = *self.sched.borrow_mut() {
+            if let Some(sched) = sched.upgrade() {
+                sched.add_message(Message::View(view_message));
+            }
+        }
+    }
+
     pub fn set_page(&mut self, raw: String) {
         let v = wasm_bindgen::JsValue::from_str(&format!("{}", "hay 2"));
         web_sys::console::log_1(&v);
         let route = raw.replace(r#"/^#\//"#, "");
         self.active_route = route.clone();
         self._filter(false);
-        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "hay 22"));
+        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "controller 22"));
         web_sys::console::log_1(&v);
-        if let Some(ref mut view) = self.view {
-            let v = wasm_bindgen::JsValue::from_str(&format!("{}", "hay 3"));
-            web_sys::console::log_1(&v);
-            view.update_filter_buttons(route);
-        }
+        self.add_message(ViewMessage::UpdateFilterButtons(route));
     }
 
     /// Add an Item to the Store and display it in the list.
@@ -89,13 +90,7 @@ impl  Controller {
             title,
             completed: false,
         });
-        if let Some(ref mut view) = self.view {
-            view.clear_new_todo();
-        }
-        // Why does a map cause a move?
-        //     self.view.map(|ref mut view| {
-        //         view.clear_new_todo();
-        //     });
+        self.add_message(ViewMessage::ClearNewTodo());
         self._filter(true);
     }
 
@@ -177,20 +172,20 @@ impl  Controller {
                 _ => ItemQuery::EmptyItemQuery,
             };
             if let Some(res) = self.store.find(query) {
+/*
                 if let Some(ref mut view) = self.view {
                     view.show_items(res);
                 }
+*/
+                //self.add_message(ViewMessage::ShowItems(res));
             }
         }
 
         if let Some((total, active, completed)) = self.store.count() {
-            if let Some(ref mut view) = self.view {
-                view.set_items_left(active);
-                view.set_clear_completed_button_visibility(completed > 0);
-
-                view.set_complete_all_checkbox(completed == total);
-                view.set_main_visibility(total > 0);
-            }
+            self.add_message(ViewMessage::SetItemsLeft(active));
+            self.add_message(ViewMessage::SetClearCompletedButtonVisibility(completed > 0));
+            self.add_message(ViewMessage::SetCompleteAllCheckbox(completed == total));
+            self.add_message(ViewMessage::SetMainVisibility(total > 0));
         }
 
         self.last_active_route = route.to_string();
