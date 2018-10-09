@@ -12,9 +12,11 @@ use std::rc::{Rc, Weak};
 use std::sync::Mutex;
 
 pub mod controller;
+pub mod scheduler;
 pub mod store;
 pub mod view;
 use crate::controller::{Controller, ControllerMessage};
+use crate::scheduler::Scheduler;
 use crate::store::Store;
 use crate::view::{View, ViewMessage};
 
@@ -36,95 +38,6 @@ pub enum Message {
 fn dbg(message: &str) {
     let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
     web_sys::console::log_1(&v);
-}
-
-pub struct Scheduler {
-    controller: Rc<RefCell<Option<Controller>>>,
-    view: Rc<RefCell<Option<View>>>,
-    events: RefCell<Vec<Message>>,
-    running: RefCell<bool>,
-}
-
-impl Scheduler {
-    fn new() -> Scheduler {
-        Scheduler {
-            controller: Rc::new(RefCell::new(None)),
-            view: Rc::new(RefCell::new(None)),
-            events: RefCell::new(Vec::new()),
-            running: RefCell::new(false),
-        }
-    }
-    fn set_controller(&self, controller: Controller) {
-        let mut controller_data = self.controller.borrow_mut();
-        controller_data.replace(controller);
-    }
-    fn set_view(&self, view: View) {
-        let mut view_data = self.view.borrow_mut();
-        view_data.replace(view);
-    }
-    fn add_message(&self, message: Message) {
-        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
-        web_sys::console::log_1(&v);
-        let mut running = false;
-        {
-            running = self.running.borrow().clone();
-        }
-        {
-            let mut events = self.events.borrow_mut(); // TODO use try_borrow
-            events.push(message);
-        }
-        if !running {
-            self.run();
-        }
-    }
-    fn run(&self) {
-        dbg("run");
-        let mut events_len = 0;
-        {
-            events_len = self.events.borrow().len().clone(); // TODO use try_borrow
-        }
-        dbg("run 1");
-        if events_len == 0 {
-            dbg("run 3");
-            let mut running = self.running.borrow_mut();
-            *running = false;
-        } else {
-            dbg("run 4");
-            {
-                let mut running = self.running.borrow_mut();
-                *running = true;
-            }
-            dbg("run 5");
-            self.next_message();
-        }
-    }
-    fn next_message(&self) {
-        let mut event = None;
-        {
-            let mut events = self.events.borrow_mut(); // TODO use try_borrow
-            event = events.pop();
-        }
-        if let Some(event) = event {
-            match event {
-                Message::Controller(e) => {
-                    if let Some(ref mut ag) = *self.controller.borrow_mut() {
-                        // TODO use try_borrow
-                        ag.call(e);
-                    }
-                }
-                Message::View(e) => {
-                    if let Some(ref mut ag) = *self.view.borrow_mut() {
-                        // TODO use try_borrow
-                        ag.call(e);
-                    }
-                }
-            }
-            self.run();
-        } else {
-            let mut running = self.running.borrow_mut();
-            *running = false;
-        }
-    }
 }
 
 fn app(name: &str) -> Option<()> {
