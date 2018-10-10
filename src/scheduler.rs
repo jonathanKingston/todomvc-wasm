@@ -1,4 +1,5 @@
 use crate::controller::Controller;
+use crate::dbg;
 use crate::view::View;
 use crate::Message;
 use std::cell::RefCell;
@@ -86,5 +87,11 @@ impl Scheduler {
             let mut running = self.running.borrow_mut();
             *running = false;
         }
+    }
+}
+
+impl Drop for Scheduler {
+    fn drop(&mut self) {
+        dbg("calling drop on Scheduler");
     }
 }

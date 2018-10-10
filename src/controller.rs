@@ -1,3 +1,4 @@
+use crate::dbg;
 use crate::store::*;
 use crate::view::{View, ViewMessage};
 use crate::{Message, Scheduler};
@@ -5,11 +6,6 @@ use js_sys::Date;
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-
-fn dbg(message: &str) {
-    let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
-    web_sys::console::log_1(&v);
-}
 
 pub struct Controller {
     store: Store,
@@ -23,6 +19,11 @@ pub enum ControllerMessage {
     AddItem(String),
     SetPage(String),
     EditItemSave(usize, String),
+    ToggleItem(usize, bool),
+    EditItemCancel(usize),
+    RemoveCompleted(),
+    RemoveItem(usize),
+    ToggleAll(bool),
 }
 
 impl Controller {
@@ -34,23 +35,9 @@ impl Controller {
             active_route: "".into(),
             last_active_route: "".into(),
         };
-        /*
-        if let Some(ref mut view) = controller.view {
-            view.bind_edit_item_save(|a, b| {
-                controller.edit_item_save(a.into(), b.to_string());
-            });
-        }
-*/
         /* 
-  		view.bind_add_item(controller.add_item);
-  		view.bind_edit_item_cancel(controller.edit_item_cancel);
   		view.bind_remove_item(controller.remove_item);
-  		view.bind_toggle_item((id, completed) => {
-  			controller.toggle_completed(id, completed);
-  			controller._filter();
-  		});
   		view.bind_remove_completed(controller.removeCompletedItems.bind(controller));
-  		view.bind_toggle_all(controller.toggleAll.bind(controller));
 */
 
         controller
@@ -67,7 +54,17 @@ impl Controller {
             AddItem(title) => self.add_item(title),
             SetPage(hash) => self.set_page(hash),
             EditItemSave(id, value) => self.edit_item_save(id, value),
+            EditItemCancel(id) => self.edit_item_cancel(id),
+            RemoveCompleted() => self.remove_completed_items(),
+            RemoveItem(id) => self.remove_item(id),
+            ToggleAll(completed) => self.toggle_all(completed),
+            ToggleItem(id, completed) => self.toggle_item(id, completed),
         }
+    }
+
+    fn toggle_item(&mut self, id: usize, completed: bool) {
+        self.toggle_completed(id, completed);
+        self._filter(completed);
     }
 
     fn add_message(&self, view_message: ViewMessage) {
@@ -203,5 +200,11 @@ impl Controller {
         }
 
         self.last_active_route = route.to_string();
+    }
+}
+
+impl Drop for Controller {
+    fn drop(&mut self) {
+        dbg("calling drop on Controller");
     }
 }

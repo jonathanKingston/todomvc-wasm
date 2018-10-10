@@ -1,4 +1,5 @@
 use crate::controller::ControllerMessage;
+use crate::dbg;
 use crate::store::{ItemList, ItemListSlice, ItemListTrait};
 use crate::{Message, Scheduler};
 use std::cell::RefCell;
@@ -9,18 +10,18 @@ use wasm_bindgen::JsCast;
 const ENTER_KEY: u32 = 13;
 const ESCAPE_KEY: u32 = 27;
 
+extern crate wasm_bindgen;
+use wasm_bindgen::prelude::*;
+
 pub enum ViewMessage {
     UpdateFilterButtons(String),
     ClearNewTodo(),
     ShowItems(ItemList),
     SetItemsLeft(usize),
+    //    EditItem(usize),
     SetClearCompletedButtonVisibility(bool),
     SetCompleteAllCheckbox(bool),
     SetMainVisibility(bool),
-}
-fn dbg(message: &str) {
-    let v = wasm_bindgen::JsValue::from_str(&format!("{}", message));
-    web_sys::console::log_1(&v);
 }
 
 fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
@@ -50,18 +51,20 @@ fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
     }
 }
 
+#[wasm_bindgen]
 pub struct View {
-    sched: RefCell<Option<Weak<Scheduler>>>,
+    sched: RefCell<Rc<Scheduler>>,
     todo_list: Element,
     todo_item_counter: Element,
     clear_completed: Element,
     main: Element,
     toggle_all: Element,
     new_todo: Element,
+    callbacks: Vec<(web_sys::EventTarget, String, Closure<FnMut()>)>,
 }
 
 impl View {
-    pub fn new(sched: Weak<Scheduler>) -> Option<View> {
+    pub fn new(sched: Rc<Scheduler>) -> Option<View> {
         let todo_list = Element::qs(".todo-list")?;
         let todo_item_counter = Element::qs(".todo-count")?;
         let clear_completed = Element::qs(".clear-completed")?;
@@ -69,15 +72,17 @@ impl View {
         let toggle_all = Element::qs(".toggle-all")?;
         let new_todo = Element::qs(".new-todo")?;
         let mut view = View {
-            sched: RefCell::new(Some(sched)),
+            sched: RefCell::new(sched),
             todo_list,
             todo_item_counter,
             clear_completed,
             main,
             toggle_all,
             new_todo,
+            callbacks: Vec::new(),
         };
 
+        //let sched = self.sched.clone();
         view.todo_list.delegate(
             "li label",
             "dblclick",
@@ -85,19 +90,68 @@ impl View {
                 if let Some(target) = e.target() {
                     if let Ok(el) = wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(target) {
                         dbg("heyyy");
-                        // view.edit_item(el);
+                        //view.edit_item(el);
+                        // let ref sched = *sched.borrow_mut();
+                        // sched
+                        //     .add_message(Message::View(ViewMessage::EditItem(id)));
                     }
                 }
             },
             false,
         );
-        /*
-        view.bind_edit_item_save(|a, b| {
- 
-        });
-*/
 
         Some(view)
+    }
+
+    pub fn init(&mut self) {
+        dbg("got init");
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                dbg("got doc");
+
+                let sched = self.sched.clone();
+                let set_page = Closure::wrap(Box::new(move || {
+                    dbg("new hash");
+                    if let Some(location) = document.location() {
+                        if let Ok(hash) = location.hash() {
+                            dbg("calling");
+                            // TODO refactor back into fn
+                            // Was: &self.add_message(ControllerMessage::SetPage(hash));
+
+                            dbg("sending");
+                            let ref sched = *sched.borrow_mut();
+                            sched
+                                .add_message(Message::Controller(ControllerMessage::SetPage(hash)));
+                            // TODO refactor back into fn
+                        }
+                    }
+                }) as Box<FnMut()>);
+
+                let window_et: web_sys::EventTarget = window.into();
+                /*
+                let c = set_page.as_ref().unchecked_ref();
+                window_et.add_event_listener_with_callback(
+                    "load",
+                    set_page.as_ref().unchecked_ref(),
+                );
+                self.callbacks.push((window_et, "load".to_string(), set_page));
+*/
+                dbg("about to add hashchange");
+                window_et.add_event_listener_with_callback(
+                    "hashchange",
+                    set_page.as_ref().unchecked_ref(),
+                );
+                set_page.forget(); // Cycle collect this
+                                   //self.callbacks.push((window_et, "hashchange".to_string(), set_page));
+                self.bind_add_item();
+                self.bind_edit_item_save();
+                self.bind_edit_item_cancel();
+                self.bind_remove_item();
+                self.bind_toggle_item();
+                self.bind_remove_completed();
+                self.bind_toggle_all();
+            }
+        }
     }
 
     pub fn call(&mut self, method_name: ViewMessage) {
@@ -116,11 +170,8 @@ impl View {
     }
 
     fn add_message(&self, controller_message: ControllerMessage) {
-        if let Some(ref sched) = *self.sched.borrow_mut() {
-            if let Some(sched) = sched.upgrade() {
-                sched.add_message(Message::Controller(controller_message));
-            }
-        }
+        let ref sched = *self.sched.borrow_mut();
+        sched.add_message(Message::Controller(controller_message));
     }
 
     /// Put an item into edit mode.
@@ -282,11 +333,8 @@ impl View {
         }
     }
 
-    fn bind_add_item<T>(&mut self, handler: T)
-    where
-        // TODO rewrite without static
-        T: 'static + Fn(&str) -> (),
-    {
+    fn bind_add_item(&mut self) {
+        let sched = self.sched.clone();
         let cb = move |event: web_sys::Event| {
             if let Some(target) = event.target() {
                 if let Some(input_el) =
@@ -295,7 +343,10 @@ impl View {
                     let v = input_el.value(); // TODO remove with nll
                     let title = v.trim();
                     if title != "" {
-                        handler(&title);
+                        let ref sched = *sched.borrow_mut();
+                        sched.add_message(Message::Controller(ControllerMessage::AddItem(
+                            String::from(title),
+                        )));
                     }
                 }
             }
@@ -303,33 +354,19 @@ impl View {
         self.new_todo.add_event_listener("change", cb);
     }
 
-    fn bind_remove_completed<T>(&mut self, handler: T)
-    where
-        // TODO rewrite without static
-        T: 'static + Fn(web_sys::Event) -> (),
-    {
-        /*
-        let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            handler(event);
-        }) as Box<FnMut(_)>);
-*/
+    fn bind_remove_completed(&mut self) {
+        let sched = self.sched.clone();
+        let handler = move |_| {
+            let ref sched = *sched.borrow_mut();
+            sched.add_message(Message::Controller(ControllerMessage::RemoveCompleted()));
+        };
         self.clear_completed.add_event_listener("click", handler);
-        /*
-        if let Some(clear_completed_et) = self.clear_completed.into(): Option<web_sys::EventTarget>
-        {
-            clear_completed_et
-                .add_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
-        }
-*/
     }
 
-    fn bind_toggle_all<T>(&mut self, handler: T) -> ()
-    // Closure<dyn FnMut(web_sys::Event) -> ()>
-    where
-        // TODO rewrite without static
-        T: 'static + Fn(bool) -> (),
-    {
+    fn bind_toggle_all(&mut self) {
+        let sched = self.sched.clone();
         /*
+TODO
         let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
             if let Some(target) = event.target() {
                 if let Some(input_el) =
@@ -349,7 +386,10 @@ impl View {
                     if let Some(input_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
-                        handler(input_el.checked());
+                        let ref sched = *sched.borrow_mut();
+                        sched.add_message(Message::Controller(ControllerMessage::ToggleAll(
+                            input_el.checked(),
+                        )));
                     }
                 }
             });
@@ -358,28 +398,27 @@ impl View {
         //toggle_all_et
     }
 
-    fn bind_remove_item<T>(&mut self, handler: T)
-    where
-        // TODO rewrite without static
-        T: 'static + Fn(Option<usize>) -> (),
-    {
+    fn bind_remove_item(&mut self) {
+        let sched = self.sched.clone();
         self.todo_list.delegate(
             ".destroy",
             "click",
             move |e: web_sys::Event| {
-                //TODO |{target}| {
                 if let Some(target) = e.target() {
-                    handler(item_id(&target));
+                    if let Some(item_id) = item_id(&target) {
+                        let ref sched = *sched.borrow_mut();
+                        sched.add_message(Message::Controller(ControllerMessage::RemoveItem(
+                            item_id,
+                        )));
+                    }
                 }
             },
             false,
         );
     }
 
-    fn bind_toggle_item<T>(&mut self, handler: T)
-    where
-        T: 'static + Fn(Option<usize>, bool) -> (),
-    {
+    fn bind_toggle_item(&mut self) {
+        let sched = self.sched.clone();
         self.todo_list.delegate(
             ".toggle",
             "click",
@@ -389,7 +428,13 @@ impl View {
                     if let Some(input_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
-                        handler(item_id(&target), input_el.checked());
+                        if let Some(item_id) = item_id(&target) {
+                            let ref sched = *sched.borrow_mut();
+                            sched.add_message(Message::Controller(ControllerMessage::ToggleItem(
+                                item_id,
+                                input_el.checked(),
+                            )));
+                        }
                     }
                 }
             },
@@ -397,20 +442,13 @@ impl View {
         );
     }
 
-    pub fn bind_edit_item_save<T>(&mut self, mut handler: T)
-    where
-        T: 'static + FnMut(usize, &str) -> (),
-    {
-        /*
-let mut handler = |id, value| {
-    self.add_message(ControllerMessage::EditItemSave(id, value));
-};
-        let handler = move || self.add_message;
-*/
+    fn bind_edit_item_save(&mut self) {
+        let sched = self.sched.clone();
+
         self.todo_list.delegate(
             "li .edit",
             "blur",
-            |e: web_sys::Event| {
+            move |e: web_sys::Event| {
                 // TODO |{target}| {
                 if let Some(target) = e.target() {
                     if let Some(target_el) =
@@ -421,8 +459,16 @@ let mut handler = |id, value| {
                                 wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                             {
                                 if let Some(item) = item_id(&target) {
-                                    //self.add_message(ControllerMessage::EditItemSave(item, input_el.value()));
-                                    //                         handler(item, input_el.value().trim());
+                                    dbg("calling -a");
+                                    // TODO refactor back into fn
+                                    // Was: &self.add_message(ControllerMessage::SetPage(hash));
+                                    let ref sched = *sched.borrow_mut();
+                                    dbg("sending -a");
+                                    sched.add_message(Message::Controller(
+                                        ControllerMessage::EditItemSave(item, input_el.value()),
+                                    ));
+
+                                    // TODO refactor back into fn
                                 }
                             }
                         }
@@ -453,10 +499,8 @@ let mut handler = |id, value| {
         );
     }
 
-    fn bind_edit_item_cancel<T>(&mut self, handler: T)
-    where
-        T: 'static + Fn(Option<usize>) -> (),
-    {
+    fn bind_edit_item_cancel(&mut self) {
+        let sched = self.sched.clone();
         self.todo_list.delegate(
             "li .edit",
             "keyup",
@@ -471,7 +515,12 @@ let mut handler = |id, value| {
                                 el.blur();
                             }
 
-                            handler(item_id(&target));
+                            if let Some(item_id) = item_id(&target) {
+                                let ref sched = *sched.borrow_mut();
+                                sched.add_message(Message::Controller(
+                                    ControllerMessage::EditItemCancel(item_id),
+                                ));
+                            }
                         }
                     }
                 }
@@ -484,6 +533,7 @@ let mut handler = |id, value| {
 struct Element {
     el: Option<web_sys::Element>,
 }
+
 impl From<Element> for Option<web_sys::Node> {
     fn from(obj: Element) -> Option<web_sys::Node> {
         if let Some(el) = obj.el {
@@ -529,6 +579,7 @@ impl Element {
         if let Some(el) = self.el.take() {
             let el_et: web_sys::EventTarget = el.into();
             el_et.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
+            cb.forget(); // TODO cycle collect this
             if let Ok(el) = wasm_bindgen::JsCast::dyn_into(el_et): Result<web_sys::Element, _> {
                 self.el = Some(el);
             }
@@ -548,13 +599,16 @@ impl Element {
         T: 'static + FnMut(web_sys::Event) -> (),
     {
         let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
+            dbg("got fn call delegated");
             if let Some(target_element) = event.target() {
                 let dyn_el: Option<&web_sys::Element> =
                     wasm_bindgen::JsCast::dyn_ref(&target_element);
                 if let Some(target_element) = dyn_el {
                     if let Ok(potential_elements) = target_element.query_selector_all(selector) {
                         //let hasMatch = Array.prototype.indexOf.call(potential_elements, target_element) >= 0;
+                        dbg("got fn call delegated arse");
                         let mut has_match = false;
+                        dbg(format!("len: {} {}", potential_elements.length(), selector).as_str());
                         for i in 0..potential_elements.length() {
                             if let Some(el) = potential_elements.get(i) {
                                 has_match = true;
@@ -563,6 +617,7 @@ impl Element {
                         }
 
                         if has_match {
+                            dbg("got fn call delegated match");
                             //handler.call(target_element, event);
                             handler(event);
                         }
@@ -582,6 +637,7 @@ impl Element {
                     cb.as_ref().unchecked_ref(),
                     use_capture,
                 );
+                cb.forget(); // TODO cycle collect
             }
             //if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(element_et): web_sys::Element {
             self.el = Some(el);
@@ -608,6 +664,7 @@ impl Element {
         target.add_event_listener_with_callback(type, cb.as_ref().unchecked_ref(), use_capture);
     };
     */    }
+
     fn qs_from(&mut self, selector: &str) -> Option<web_sys::Element> {
         let el = self.el.take();
         let mut found_el = None;
@@ -687,5 +744,19 @@ impl Template {
     fn item_counter(active_todos: usize) -> String {
         let plural = if active_todos > 1 { "s" } else { "" };
         return format!("{} item{} left", active_todos, plural);
+    }
+}
+
+impl Drop for View {
+    fn drop(&mut self) {
+        dbg("calling drop on view");
+        let callbacks: Vec<(web_sys::EventTarget, String, Closure<FnMut()>)> =
+            self.callbacks.drain(..).collect();
+        for callback in callbacks {
+            callback.0.remove_event_listener_with_callback(
+                callback.1.as_str(),
+                &callback.2.as_ref().unchecked_ref(),
+            );
+        }
     }
 }
