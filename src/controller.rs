@@ -5,7 +5,7 @@ use crate::{Message, Scheduler};
 use js_sys::Date;
 
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 
 pub struct Controller {
     store: Store,
@@ -28,19 +28,17 @@ pub enum ControllerMessage {
 
 impl Controller {
     pub fn new(store: Store, view: Option<View>, sched: Weak<Scheduler>) -> Controller {
-        let mut controller = Controller {
+        Controller {
             store,
             view,
             sched: RefCell::new(Some(sched)),
             active_route: "".into(),
             last_active_route: "".into(),
-        };
+        }
         /* 
   		view.bind_remove_item(controller.remove_item);
   		view.bind_remove_completed(controller.removeCompletedItems.bind(controller));
 */
-
-        controller
     }
 
     /// Take ownership of the view
@@ -99,7 +97,7 @@ impl Controller {
 
     /// Save an Item in edit.
     fn edit_item_save(&mut self, id: usize, title: String) {
-        if title.len() > 0 {
+        if !title.is_empty() {
             self.store.update(ItemUpdate::Title {
                 id,
                 title: title.clone(),

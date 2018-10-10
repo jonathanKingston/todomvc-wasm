@@ -3,13 +3,10 @@
 
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 
 extern crate js_sys;
 extern crate web_sys;
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-use std::sync::Mutex;
+use std::rc::Rc;
 
 pub mod controller;
 pub mod scheduler;
@@ -19,16 +16,6 @@ use crate::controller::{Controller, ControllerMessage};
 use crate::scheduler::Scheduler;
 use crate::store::Store;
 use crate::view::{View, ViewMessage};
-
-/*
-// TODO remove when wasm bindgen supports this
-#[wasm_bindgen]
-extern "C" {
-    type DefinePropertyAttrs;
-    #[wasm_bindgen(method, setter, structural)]
-    fn set_value(this: &DefinePropertyAttrs, val: &JsValue);
-}
-*/
 
 pub enum Message {
     Controller(ControllerMessage),
@@ -42,7 +29,7 @@ pub fn dbg(message: &str) {
 
 fn app(name: &str) -> Option<()> {
     use std::borrow::Borrow;
-    let mut sched = Rc::new(Scheduler::new());
+    let sched = Rc::new(Scheduler::new());
     let store = Store::new(name)?;
     let controller = Controller::new(store, None, Rc::downgrade(&sched));
     let mut view = View::new(sched.clone())?;

@@ -3,7 +3,7 @@ use crate::dbg;
 use crate::view::View;
 use crate::Message;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 /// Creates an event loop that starts each time a message is added
 pub struct Scheduler {
@@ -33,10 +33,9 @@ impl Scheduler {
     pub fn add_message(&self, message: Message) {
         let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
         web_sys::console::log_1(&v);
-        let mut running = false;
-        {
-            running = self.running.borrow().clone();
-        }
+        let mut running = {
+            self.running.borrow().clone()
+        };
         {
             let mut events = self.events.borrow_mut(); // TODO use try_borrow
             events.push(message);
@@ -46,7 +45,7 @@ impl Scheduler {
         }
     }
     fn run(&self) {
-        let mut events_len = 0;
+        let mut events_len;
         {
             events_len = self.events.borrow().len().clone(); // TODO use try_borrow
         }
@@ -62,11 +61,10 @@ impl Scheduler {
         }
     }
     fn next_message(&self) {
-        let mut event = None;
-        {
+        let event = {
             let mut events = self.events.borrow_mut(); // TODO use try_borrow
-            event = events.pop();
-        }
+            events.pop()
+        };
         if let Some(event) = event {
             match event {
                 Message::Controller(e) => {

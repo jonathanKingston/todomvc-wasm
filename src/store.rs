@@ -39,7 +39,7 @@ impl Store {
     /// Uses mut here as the return is something we might want to manipulate
     fn get_local_storage(&mut self) -> &Option<ItemList> {
         let mut item_list = ItemList::new();
-        if let Some(ref data) = self.data {
+        if let Some(ref _data) = self.data {
             return &self.data;
         }
         if let Ok(Some(value)) = self.local_storage.get_item(&self.name) {
@@ -159,7 +159,7 @@ dbg("got here ---*a4");
         //, callback) {
         let id = update.id();
         self.get_local_storage();
-        self.data.take().map(|todos| {
+        if let Some(todos) = self.data.take() {
             let todos = todos.into_iter();
 
             let todos = todos
@@ -170,7 +170,7 @@ dbg("got here ---*a4");
                     todo
                 }).collect();
             self.set_local_storage(todos);
-        });
+        }
     }
 
     /// Insert an item into the Store.
@@ -228,10 +228,10 @@ pub struct Item {
 impl Item {
     pub fn update(&mut self, update: &ItemUpdate) {
         match update {
-            ItemUpdate::Title { id, title } => {
+            ItemUpdate::Title { title, .. } => {
                 self.title = title.to_string();
             }
-            ItemUpdate::Completed { id, completed } => {
+            ItemUpdate::Completed { completed, .. } => {
                 self.completed = *completed;
             }
         }
@@ -359,8 +359,8 @@ pub enum ItemUpdate {
 impl ItemUpdate {
     fn id(&self) -> usize {
         match self {
-            ItemUpdate::Title { id, title } => *id,
-            ItemUpdate::Completed { id, completed } => *id,
+            ItemUpdate::Title { id, .. } => *id,
+            ItemUpdate::Completed { id, .. } => *id,
         }
     }
 }

@@ -1,10 +1,9 @@
 use crate::controller::ControllerMessage;
 use crate::dbg;
-use crate::store::{ItemList, ItemListSlice, ItemListTrait};
+use crate::store::{ItemList, ItemListTrait};
 use crate::{Message, Scheduler};
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-use wasm_bindgen::prelude::*;
+use std::rc::Rc;
 use wasm_bindgen::JsCast;
 
 const ENTER_KEY: u32 = 13;
@@ -169,11 +168,6 @@ impl View {
         }
     }
 
-    fn add_message(&self, controller_message: ControllerMessage) {
-        let ref sched = *self.sched.borrow_mut();
-        sched.add_message(Message::Controller(controller_message));
-    }
-
     /// Put an item into edit mode.
     fn edit_item(&self, target: web_sys::Element) {
         let target_node: web_sys::Node = target.into();
@@ -268,16 +262,16 @@ impl View {
 
     /// Change the appearance of the filter buttons based on the route.
     pub fn update_filter_buttons(&self, route: String) {
-        Element::qs(".filters .selected").map(|el| {
+        if let Some(el) = Element::qs(".filters .selected") {
             if let Some(el) = el.el {
                 el.set_class_name("");
             }
-        });
-        Element::qs(&format!(".filters [href=\"#{}\"]", route)).map(|el| {
+        }
+        if let Some(el) = Element::qs(&format!(".filters [href=\"#{}\"]", route)) {
             if let Some(el) = el.el {
                 el.set_class_name("selected");
             }
-        });
+        }
     }
 
     /// Clear the new todo input
@@ -301,13 +295,13 @@ impl View {
             }
 
             // In case it was toggled from an event and not by clicking the checkbox
-            list_item.qs_from("input").map(|el| {
+            if let Some(el) = list_item.qs_from("input") {
                 if let Some(input_el) =
                     wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&el)
                 {
                     input_el.set_checked(completed);
                 }
-            });
+            }
         }
     }
 
@@ -731,7 +725,7 @@ impl Template {
                 item.id, completed_class, checked, title
             ));
         }
-        return output;
+        output
     }
 
     /**
