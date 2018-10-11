@@ -9,6 +9,7 @@ extern crate web_sys;
 use std::rc::Rc;
 
 pub mod controller;
+pub mod element;
 pub mod scheduler;
 pub mod store;
 pub mod template;

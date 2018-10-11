@@ -1,5 +1,6 @@
 use crate::controller::ControllerMessage;
 use crate::dbg;
+use crate::element::Element;
 use crate::store::{ItemList, ItemListTrait};
 use crate::{Message, Scheduler};
 use std::cell::RefCell;
@@ -205,110 +206,68 @@ impl View {
     }
 
     /// Populate the todo list with a list of items.
-    pub fn show_items(&self, items: ItemList) {
+    pub fn show_items(&mut self, items: ItemList) {
         dbg("shhhhh");
         // TODO what is items?
-        if let Some(ref el) = self.todo_list.el {
-            dbg("itemss");
-            el.set_inner_html(&Template::item_list(items));
-        }
+        self.todo_list.set_inner_html(Template::item_list(items));
     }
 
     /// Remove an item from the view.
-    pub fn remove_item(&self, id: String) {
+    pub fn remove_item(&mut self, id: String) {
         let elem = Element::qs(&format!("[data-id=\"{}\"]", id));
 
         dbg("removing node -a");
         if let Some(elem) = elem {
-            if let Some(ref el) = self.todo_list.el {
-                if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(el): Option<&web_sys::Node> {
-                    if let Some(elem) = elem.into(): Option<web_sys::Node> {
-                        dbg("removing node -");
-                        dyn_el.remove_child(&elem);
-                        //elem.remove();
-                    }
-                }
-            }
+            self.todo_list.remove_child(elem);
         }
     }
 
     /// Set the number in the 'items left' display.
-    pub fn set_items_left(&self, items_left: usize) {
+    pub fn set_items_left(&mut self, items_left: usize) {
         // TODO what is items left?
-        if let Some(ref todo_item_counter) = self.todo_item_counter.el {
-            todo_item_counter.set_inner_html(&Template::item_counter(items_left));
-        }
+        self.todo_item_counter
+            .set_inner_html(Template::item_counter(items_left));
     }
 
     /// Set the visibility of the "Clear completed" button.
-    pub fn set_clear_completed_button_visibility(&self, visible: bool) {
-        if let Some(ref clear_completed) = self.clear_completed.el {
-            dbg("got a button!");
-            set_visibility(clear_completed, visible);
-        }
+    pub fn set_clear_completed_button_visibility(&mut self, visible: bool) {
+        self.clear_completed.set_visibility(visible);
     }
 
     /// Set the visibility of the main content and footer.
-    pub fn set_main_visibility(&self, visible: bool) {
-        if let Some(ref main) = self.main.el {
-            dbg("got a main!");
-            set_visibility(main, visible);
-        }
+    pub fn set_main_visibility(&mut self, visible: bool) {
+        self.main.set_visibility(visible);
     }
 
     /// Set the checked state of the Complete All checkbox.
     pub fn set_complete_all_checkbox(&mut self, checked: bool) {
-        if let Some(toggle_all) = self.toggle_all.el.take() {
-            if let Some(toggle_all) =
-                wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&toggle_all)
-            {
-                toggle_all.set_checked(checked);
-            }
-            self.toggle_all.el = Some(toggle_all);
-        }
+        self.toggle_all.set_checked(checked);
     }
 
     /// Change the appearance of the filter buttons based on the route.
     pub fn update_filter_buttons(&self, route: String) {
-        if let Some(el) = Element::qs(".filters .selected") {
-            if let Some(el) = el.el {
-                el.set_class_name("");
-            }
+        if let Some(mut el) = Element::qs(".filters .selected") {
+            el.set_class_name(String::new());
         }
-        if let Some(el) = Element::qs(&format!(".filters [href=\"#{}\"]", route)) {
-            if let Some(el) = el.el {
-                el.set_class_name("selected");
-            }
+        if let Some(mut el) = Element::qs(&format!(".filters [href=\"#{}\"]", route)) {
+            el.set_class_name(String::from("selected"));
         }
     }
 
     /// Clear the new todo input
     pub fn clear_new_todo(&mut self) {
-        if let Some(new_todo) = self.new_todo.el.take() {
-            if let Some(input_el) =
-                wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&new_todo)
-            {
-                input_el.set_value("");
-            }
-            self.new_todo.el = Some(new_todo);
-        }
+        self.new_todo.set_value(String::new());
     }
 
     /// Render an item as either completed or not.
     pub fn set_item_complete(&self, id: String, completed: bool) {
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
             let class_name = if completed { "completed" } else { "" };
-            if let Some(ref list_item) = list_item.el {
-                list_item.set_class_name(class_name);
-            }
+            list_item.set_class_name(String::from(class_name));
 
             // In case it was toggled from an event and not by clicking the checkbox
-            if let Some(el) = list_item.qs_from("input") {
-                if let Some(input_el) =
-                    wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&el)
-                {
-                    input_el.set_checked(completed);
-                }
+            if let Some(mut el) = list_item.qs_from("input") {
+                el.set_checked(completed);
             }
         }
     }
@@ -319,18 +278,13 @@ impl View {
 
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
             if let Some(input) = list_item.qs_from("input.edit") {
-                if let Some(ref list_item_el) = list_item.el {
-                    list_item_el.class_list().remove_1("editing");
+                list_item.class_list_remove(String::from("editing"));
+
+                if let Some(mut list_item_label) = list_item.qs_from("label") {
+                    list_item_label.set_text_content(title.into());
                 }
 
-                if let Some(list_item_label) = list_item.qs_from("label") {
-                    let list_item_label_node: web_sys::Node = list_item_label.into();
-                    list_item_label_node.set_text_content(Some(title.as_str()));
-                }
-
-                if let Some(list_item_node) = list_item.into(): Option<web_sys::Node> {
-                    list_item_node.remove_child(&input.into());
-                }
+                list_item.remove_child(input);
             }
         }
     }
@@ -509,147 +463,6 @@ impl View {
             },
             false,
         );
-    }
-}
-
-struct Element {
-    el: Option<web_sys::Element>,
-}
-
-impl From<Element> for Option<web_sys::Node> {
-    fn from(obj: Element) -> Option<web_sys::Node> {
-        if let Some(el) = obj.el {
-            Some(el.into())
-        } else {
-            None
-        }
-    }
-}
-
-impl From<Element> for Option<web_sys::EventTarget> {
-    fn from(obj: Element) -> Option<web_sys::EventTarget> {
-        if let Some(el) = obj.el {
-            Some(el.into())
-        } else {
-            None
-        }
-    }
-}
-
-impl Element {
-    fn qs(selector: &str) -> Option<Element> {
-        let body: web_sys::Element = web_sys::window()?.document()?.body()?.into();
-        let el = body.query_selector(selector).ok()?;
-        Some(Element { el })
-    }
-
-    fn add_event_listener<T>(&mut self, event_name: &str, handler: T)
-    where
-        // TODO rewrite without static
-        T: 'static + FnMut(web_sys::Event) -> (),
-    {
-        let cb = Closure::wrap(Box::new(handler) as Box<FnMut(_)>);
-        if let Some(el) = self.el.take() {
-            let el_et: web_sys::EventTarget = el.into();
-            el_et.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
-            cb.forget(); // TODO cycle collect this
-            if let Ok(el) = wasm_bindgen::JsCast::dyn_into(el_et): Result<web_sys::Element, _> {
-                self.el = Some(el);
-            }
-        }
-    }
-
-    // TODO fix static lifetimes
-    fn delegate<T>(
-        &mut self,
-        // element: web_sys::Element,
-        // element: Element,
-        selector: &'static str,
-        event: &str,
-        mut handler: T,
-        use_capture: bool,
-    ) where
-        T: 'static + FnMut(web_sys::Event) -> (),
-    {
-        if let Some(el) = self.el.take() {
-            //  if let Some(element_et) = self.into(): Option<web_sys::EventTarget> {
-            //let element_et: web_sys::EventTarget = el.into();
-            if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(&el): Option<&web_sys::EventTarget>
-            {
-                //let rc_el = Rc::new(el);
-                //let cl_el = rc_el.clone();
-                if let Some(window) = web_sys::window() {
-                    if let Some(document) = window.document() {
-                        //let tg_el: web_sys::Element = self.el;
-                        // TODO document selector to the target element
-                        let tg_el = document;
-
-                        let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
-                            dbg("got fn call delegated");
-                            if let Some(target_element) = event.target() {
-                                let dyn_target_el: Option<
-                                    &web_sys::Node,
-                                > = wasm_bindgen::JsCast::dyn_ref(&target_element);
-                                if let Some(target_element) = dyn_target_el {
-                                    if let Ok(potential_elements) =
-                                        tg_el.query_selector_all(selector)
-                                    {
-                                        //let hasMatch = Array.prototype.indexOf.call(potential_elements, target_element) >= 0;
-                                        dbg("got fn call delegated arse");
-                                        let mut has_match = false;
-                                        dbg(format!(
-                                            "len: {} {}",
-                                            potential_elements.length(),
-                                            selector
-                                        ).as_str());
-                                        for i in 0..potential_elements.length() {
-                                            if let Some(el) = potential_elements.get(i) {
-                                                if target_element.is_equal_node(Some(&el)) {
-                                                    has_match = true;
-                                                }
-                                                break;
-                                            }
-                                        }
-
-                                        if has_match {
-                                            dbg("got fn call delegated match");
-                                            //handler.call(target_element, event);
-                                            handler(event);
-                                        }
-                                    }
-                                }
-                            }
-                        }) as Box<FnMut(_)>);
-
-                        dyn_el.add_event_listener_with_callback_and_bool(
-                            //element_et.add_event_listener_with_callback_and_bool(
-                            event,
-                            cb.as_ref().unchecked_ref(),
-                            use_capture,
-                        );
-                        cb.forget(); // TODO cycle collect
-                    }
-                }
-            }
-            self.el = Some(el);
-        }
-    }
-
-    fn qs_from(&mut self, selector: &str) -> Option<web_sys::Element> {
-        let el = self.el.take();
-        let mut found_el = None;
-        if let Some(el) = self.el.take() {
-            found_el = el.query_selector(selector).ok()?;
-            self.el = Some(el);
-        }
-        found_el
-    }
-}
-
-fn set_visibility(el: &web_sys::Element, visible: bool) {
-    let dyn_el: Option<&web_sys::HtmlElement> = wasm_bindgen::JsCast::dyn_ref(el);
-    if let Some(el) = dyn_el {
-        el.set_hidden(!visible);
     }
 }
 

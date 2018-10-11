@@ -1,6 +1,6 @@
 use crate::dbg;
 use crate::store::*;
-use crate::view::{View, ViewMessage};
+use crate::view::ViewMessage;
 use crate::{Message, Scheduler};
 use js_sys::Date;
 
