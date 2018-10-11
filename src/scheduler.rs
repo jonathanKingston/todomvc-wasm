@@ -23,65 +23,104 @@ impl Scheduler {
         }
     }
     pub fn set_controller(&self, controller: Controller) {
-        let mut controller_data = self.controller.borrow_mut();
-        controller_data.replace(controller);
+        if let Ok(mut controller_data) = self.controller.try_borrow_mut() {
+            controller_data.replace(controller);
+        } else {
+            dbg("This might be a deadlock");
+        }
     }
     pub fn set_view(&self, view: View) {
-        let mut view_data = self.view.borrow_mut();
-        view_data.replace(view);
+        if let Ok(mut view_data) = self.view.try_borrow_mut() {
+            view_data.replace(view);
+        } else {
+            dbg("This might be a deadlock");
+        }
     }
     pub fn add_message(&self, message: Message) {
         let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
         web_sys::console::log_1(&v);
-        let mut running = { self.running.borrow().clone() };
+        let running = {
+            if let Ok(running) = self.running.try_borrow() {
+                running.clone()
+            } else {
+                dbg("This might be a deadlock");
+                false
+            }
+        };
         {
-            let mut events = self.events.borrow_mut(); // TODO use try_borrow
-            events.push(message);
+            if let Ok(mut events) = self.events.try_borrow_mut() {
+                events.push(message);
+            } else {
+                dbg("This might be a deadlock");
+            }
         }
         if !running {
             self.run();
         }
     }
     fn run(&self) {
-        let mut events_len;
+        let mut events_len = 0;
         {
-            events_len = self.events.borrow().len().clone(); // TODO use try_borrow
+            if let Ok(events) = self.events.try_borrow() {
+                events_len = events.len().clone();
+            } else {
+                dbg("This might be a deadlock");
+            }
         }
         if events_len == 0 {
-            let mut running = self.running.borrow_mut();
-            *running = false;
+            if let Ok(mut running) = self.running.try_borrow_mut() {
+                *running = false;
+            } else {
+                dbg("This might be a deadlock");
+            }
         } else {
             {
-                let mut running = self.running.borrow_mut();
-                *running = true;
+                if let Ok(mut running) = self.running.try_borrow_mut() {
+                    *running = true;
+                } else {
+                    dbg("This might be a deadlock");
+                }
             }
             self.next_message();
         }
     }
     fn next_message(&self) {
         let event = {
-            let mut events = self.events.borrow_mut(); // TODO use try_borrow
-            events.pop()
+            if let Ok(mut events) = self.events.try_borrow_mut() {
+                Some(events.pop())
+            } else {
+                dbg("This might be a deadlock");
+                None
+            }
         };
-        if let Some(event) = event {
+        if let Some(Some(event)) = event {
             match event {
                 Message::Controller(e) => {
-                    if let Some(ref mut ag) = *self.controller.borrow_mut() {
-                        // TODO use try_borrow
-                        ag.call(e);
+                    if let Ok(mut controller) = self.controller.try_borrow_mut() {
+                        if let Some(ref mut ag) = *controller {
+                            ag.call(e);
+                        }
+                    } else {
+                        dbg("This might be a deadlock");
                     }
                 }
                 Message::View(e) => {
-                    if let Some(ref mut ag) = *self.view.borrow_mut() {
-                        // TODO use try_borrow
-                        ag.call(e);
+                    if let Ok(mut view) = self.view.try_borrow_mut() {
+                        if let Some(ref mut ag) = *view {
+                            ag.call(e);
+                        }
+                    } else {
+                        dbg("This might be a deadlock");
                     }
                 }
             }
             self.run();
         } else {
-            let mut running = self.running.borrow_mut();
-            *running = false;
+            if let Ok(mut running) = self.running.try_borrow_mut() {
+                *running = false;
+            } else {
+                dbg("This might be a deadlock");
+            }
         }
     }
 }

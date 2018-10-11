@@ -55,9 +55,11 @@ impl Controller {
     }
 
     fn add_message(&self, view_message: ViewMessage) {
-        if let Some(ref sched) = *self.sched.borrow_mut() {
-            if let Some(sched) = sched.upgrade() {
-                sched.add_message(Message::View(view_message));
+        if let Ok(sched) = self.sched.try_borrow_mut() {
+            if let Some(ref sched) = *sched {
+                if let Some(sched) = sched.upgrade() {
+                    sched.add_message(Message::View(view_message));
+                }
             }
         }
     }

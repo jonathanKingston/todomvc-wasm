@@ -108,6 +108,7 @@ impl View {
                             dbg("calling");
                             // TODO refactor back into fn
                             // Was: &self.add_message(ControllerMessage::SetPage(hash));
+                            // Also remove borrow_mut in favour of try_borrow_mut
 
                             dbg("sending");
                             let ref sched = *sched.borrow_mut();
