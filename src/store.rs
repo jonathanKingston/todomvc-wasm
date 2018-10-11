@@ -55,7 +55,7 @@ impl Store {
                                             let mut temp_item = Item {
                                                 title,
                                                 completed,
-                                                id: id as usize,
+                                                id: format!("{}", id),
                                             };
                                             item_list.push(temp_item);
                                         }
@@ -74,54 +74,16 @@ impl Store {
     /// Write the local ItemList to localStorage.
     /// @param {ItemList} todos Array of todos to write
     fn set_local_storage(&mut self, todos: ItemList) {
-        /*
-        fn define_property(object: &js_sys::Object, key: &str, val: JsValue) {
-    let value = DefinePropertyAttrs::from(JsValue::from(js_sys::Object::new()));
-    value.set_value(&val);
-    let descriptor = js_sys::Object::from(JsValue::from(value));
-/*
-    let foo = foo_42();
-    let foo = Object::define_property(&foo, &"bar".into(), &descriptor);
-    assert!(foo.has_own_property(&"bar".into()));
-*/
-
- //           let prototype: js_sys::Object = wasm_bindgen::JsValue::null().into();
-  //          let descriptor = js_sys::Object::create(&prototype);
-dbg("got here ---*q1");
-web_sys::console::log_2(&val, &JsValue::from(key));
-//let val: js_sys::Object = val.into();
-// TODO below doesn't work val isn't a object it seems
-dbg("got here ---*d2");
-            //if let Some(val) = wasm_bindgen::JsCast::dyn_ref(&val): Option<&js_sys::Object> {
-   //      let val = wasm_bindgen::JsCast::unchecked_ref(&val): &js_sys::Object;
-          //let val = js_sys::Object::from(JsValue::from(val));
-dbg("got here ---n3");
-     //           js_sys::Object::define_property(&descriptor, &JsValue::from("value"), &val);
-dbg("got here ---*a4");
-                js_sys::Object::define_property(object, &key.into(), &descriptor);
-         //   }
-        }
-*/
         let array = js_sys::Array::new();
         for item in todos.iter() {
-            dbg("got here 99 {");
             let mut child = js_sys::Array::new();
-            //let mut object = js_sys::Object::new();
             let s = String::from(item.title.clone());
             child.push(&JsValue::from(&s));
             child.push(&JsValue::from(item.completed));
-            child.push(&JsValue::from(item.id as f64));
-            /*
-            define_property(&mut object, "title", JsValue::from(&s));
-            define_property(&mut object, "completed", JsValue::from(item.completed));
-            define_property(&mut object, "id", JsValue::from(item.id as f64));
-            array.push(&JsValue::from(object));
-*/
-            array.push(&JsValue::from(child));
+            child.push(&JsValue::from(format!("{}", item.id)));
 
-            dbg("got here 99 }");
+            array.push(&JsValue::from(child));
         }
-        //web_sys::console::log_1(&JsValue::from(array));
         if let Ok(storage_string) = JSON::stringify(&JsValue::from(array)) {
             let storage_string: String = storage_string.to_string().into();
             dbg(&storage_string);
@@ -156,7 +118,6 @@ dbg("got here ---*a4");
      * @param {function()} [callback] Called when partialRecord is applied
      */
     pub fn update(&mut self, update: ItemUpdate) {
-        //, callback) {
         let id = update.id();
         self.get_local_storage();
         if let Some(todos) = self.data.take() {
@@ -220,7 +181,7 @@ dbg("got here ---*a4");
 }
 
 pub struct Item {
-    pub id: usize,
+    pub id: String,
     pub title: String,
     pub completed: bool,
 }
@@ -327,7 +288,7 @@ impl<'a> Into<ItemList> for ItemListSlice<'a> {
         for j in items {
             // TODO neaten this cloning?
             let item = Item {
-                id: j.id,
+                id: j.id.clone(),
                 completed: j.completed,
                 title: j.title.clone(),
             };
@@ -338,7 +299,7 @@ impl<'a> Into<ItemList> for ItemListSlice<'a> {
 }
 
 pub enum ItemQuery {
-    Id { id: usize },
+    Id { id: String },
     Completed { completed: bool },
     EmptyItemQuery,
 }
@@ -346,21 +307,21 @@ impl ItemQuery {
     fn matches(&self, item: &Item) -> bool {
         match *self {
             ItemQuery::EmptyItemQuery => true,
-            ItemQuery::Id { id } => item.id == id,
+            ItemQuery::Id { ref id } => &item.id == id,
             ItemQuery::Completed { completed } => item.completed == completed,
         }
     }
 }
 
 pub enum ItemUpdate {
-    Title { id: usize, title: String },
-    Completed { id: usize, completed: bool },
+    Title { id: String, title: String },
+    Completed { id: String, completed: bool },
 }
 impl ItemUpdate {
-    fn id(&self) -> usize {
+    fn id(&self) -> String {
         match self {
-            ItemUpdate::Title { id, .. } => *id,
-            ItemUpdate::Completed { id, .. } => *id,
-        }
+            ItemUpdate::Title { id, .. } => id.clone(),
+            ItemUpdate::Completed { id, .. } => id.clone(),
+        }.into()
     }
 }

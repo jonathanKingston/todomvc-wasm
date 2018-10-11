@@ -33,9 +33,7 @@ impl Scheduler {
     pub fn add_message(&self, message: Message) {
         let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
         web_sys::console::log_1(&v);
-        let mut running = {
-            self.running.borrow().clone()
-        };
+        let mut running = { self.running.borrow().clone() };
         {
             let mut events = self.events.borrow_mut(); // TODO use try_borrow
             events.push(message);

@@ -6,6 +6,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 
+use crate::template::Template;
+
 const ENTER_KEY: u32 = 13;
 const ESCAPE_KEY: u32 = 27;
 
@@ -17,13 +19,21 @@ pub enum ViewMessage {
     ClearNewTodo(),
     ShowItems(ItemList),
     SetItemsLeft(usize),
-    //    EditItem(usize),
     SetClearCompletedButtonVisibility(bool),
     SetCompleteAllCheckbox(bool),
     SetMainVisibility(bool),
+    RemoveItem(String),
+    EditItemDone(String, String),
+    SetItemComplete(String, bool),
 }
 
-fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
+/**
+  TODO known bugs
+  - Refresh now doesn't show the results despite being stored
+  - filter and delete sometimes list the wrong number of items
+*/
+
+fn item_id(element: &web_sys::EventTarget) -> Option<String> {
     //TODO ugly reformat
     let dyn_el: Option<&web_sys::Node> = wasm_bindgen::JsCast::dyn_ref(element);
     if let Some(element_node) = dyn_el {
@@ -43,8 +53,8 @@ fn item_id(element: &web_sys::EventTarget) -> Option<usize> {
                     }
                 });
             }
-            res.map(|id| usize::from_str_radix(&id, 10).ok())?
-        })?
+            res.unwrap()
+        })
     } else {
         None
     }
@@ -80,24 +90,6 @@ impl View {
             new_todo,
             callbacks: Vec::new(),
         };
-
-        //let sched = self.sched.clone();
-        view.todo_list.delegate(
-            "li label",
-            "dblclick",
-            |e: web_sys::Event| {
-                if let Some(target) = e.target() {
-                    if let Ok(el) = wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(target) {
-                        dbg("heyyy");
-                        //view.edit_item(el);
-                        // let ref sched = *sched.borrow_mut();
-                        // sched
-                        //     .add_message(Message::View(ViewMessage::EditItem(id)));
-                    }
-                }
-            },
-            false,
-        );
 
         Some(view)
     }
@@ -147,9 +139,49 @@ impl View {
                 self.bind_edit_item_cancel();
                 self.bind_remove_item();
                 self.bind_toggle_item();
+                self.bind_edit_item();
                 self.bind_remove_completed();
                 self.bind_toggle_all();
             }
+        }
+    }
+
+    pub fn bind_edit_item(&mut self) {
+        self.todo_list.delegate(
+            "li label",
+            "dblclick",
+            |e: web_sys::Event| {
+                if let Some(target) = e.target() {
+                    if let Ok(el) = wasm_bindgen::JsCast::dyn_into::<web_sys::Element>(target) {
+                        View::edit_item(el);
+                    }
+                }
+            },
+            false,
+        );
+    }
+
+    /// Put an item into edit mode.
+    fn edit_item(target: web_sys::Element) {
+        let target_node: web_sys::Node = target.into();
+        if let Some(parent_element) = target_node.parent_element() {
+            let parent_node: web_sys::Node = parent_element.into();
+            if let Some(list_item) = parent_node.parent_element() {
+                list_item.class_list().add_1("editing");
+                if let Some(input) = create_element("input") {
+                    input.set_class_name("edit");
+                    let list_item_node: web_sys::Node = list_item.into();
+                    list_item_node.append_child(&input.into());
+                }
+            }
+        }
+        if let Some(el) = wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&target_node) {
+            if let Some(input_el) =
+                wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target_node)
+            {
+                input_el.set_value(&el.inner_text());
+            }
+            el.focus();
         }
     }
 
@@ -165,36 +197,9 @@ impl View {
             }
             SetCompleteAllCheckbox(complete) => self.set_complete_all_checkbox(complete),
             SetMainVisibility(complete) => self.set_main_visibility(complete),
-        }
-    }
-
-    /// Put an item into edit mode.
-    fn edit_item(&self, target: web_sys::Element) {
-        let target_node: web_sys::Node = target.into();
-        if let Some(parent_element) = target_node.parent_element() {
-            let parent_node: web_sys::Node = parent_element.into();
-            if let Some(list_item) = parent_node.parent_element() {
-                list_item.class_list().add_1("editing");
-
-                if let Some(input) = create_element("input") {
-                    input.set_class_name("edit");
-                    /* TODO fix move out of borrow
-                    if let Some(el) = wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&target)
-                    {
-/* TODO fix move out of borrow
-                        if let Some(input_el) =
-                            wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
-                        {
-                            input_el.set_value(&el.inner_text());
-                        }
-*/
-                        let list_item_node: web_sys::Node = list_item.into();
-                        list_item_node.append_child(&input.into());
-                        el.focus();
-                    }
-*/
-                }
-            }
+            RemoveItem(id) => self.remove_item(id),
+            EditItemDone(id, title) => self.edit_item_done(id, title),
+            SetItemComplete(id, title) => self.set_item_complete(id, title),
         }
     }
 
@@ -204,24 +209,26 @@ impl View {
         // TODO what is items?
         if let Some(ref el) = self.todo_list.el {
             dbg("itemss");
-            // dbg(&Template::item_list(items));
             el.set_inner_html(&Template::item_list(items));
         }
     }
 
     /// Remove an item from the view.
-    pub fn remove_item(&self, id: usize) {
+    pub fn remove_item(&self, id: String) {
         let elem = Element::qs(&format!("[data-id=\"{}\"]", id));
 
-        /*TODO fix moved out of borrow
+        dbg("removing node -a");
         if let Some(elem) = elem {
-            if let Some(todo_list_node) = self.todo_list.into(): Option<web_sys::Node> {
-                if let Some(elem) = elem.into(): Option<web_sys::Node> {
-                    todo_list_node.remove_child(&elem);
+            if let Some(ref el) = self.todo_list.el {
+                if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(el): Option<&web_sys::Node> {
+                    if let Some(elem) = elem.into(): Option<web_sys::Node> {
+                        dbg("removing node -");
+                        dyn_el.remove_child(&elem);
+                        //elem.remove();
+                    }
                 }
             }
         }
-*/
     }
 
     /// Set the number in the 'items left' display.
@@ -287,7 +294,7 @@ impl View {
     }
 
     /// Render an item as either completed or not.
-    pub fn set_item_complete(&self, id: usize, completed: bool) {
+    pub fn set_item_complete(&self, id: String, completed: bool) {
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
             let class_name = if completed { "completed" } else { "" };
             if let Some(ref list_item) = list_item.el {
@@ -306,7 +313,7 @@ impl View {
     }
 
     /// Bring an item out of edit mode.
-    pub fn edit_item_done(&self, id: usize, title: &String) {
+    pub fn edit_item_done(&self, id: String, title: String) {
         let list_item = Element::qs(&format!("[data-id=\"{}\"]", id));
 
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
@@ -359,21 +366,6 @@ impl View {
 
     fn bind_toggle_all(&mut self) {
         let sched = self.sched.clone();
-        /*
-TODO
-        let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(target) = event.target() {
-                if let Some(input_el) =
-                    wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
-                {
-                    handler(input_el.checked());
-                }
-            }
-        }) as Box<FnMut(_)>);
-        if let Some(toggle_all_et) = self.toggle_all.into(): Option<web_sys::EventTarget> {
-            toggle_all_et.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
-        }
-*/
         self.clear_completed
             .add_event_listener("click", move |event: web_sys::Event| {
                 if let Some(target) = event.target() {
@@ -387,9 +379,6 @@ TODO
                     }
                 }
             });
-        //cb.forget();
-        //cb
-        //toggle_all_et
     }
 
     fn bind_remove_item(&mut self) {
@@ -417,7 +406,6 @@ TODO
             ".toggle",
             "click",
             move |e: web_sys::Event| {
-                // TODO |{target}| {
                 if let Some(target) = e.target() {
                     if let Some(input_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
@@ -443,7 +431,6 @@ TODO
             "li .edit",
             "blur",
             move |e: web_sys::Event| {
-                // TODO |{target}| {
                 if let Some(target) = e.target() {
                     if let Some(target_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&target)
@@ -537,6 +524,7 @@ impl From<Element> for Option<web_sys::Node> {
         }
     }
 }
+
 impl From<Element> for Option<web_sys::EventTarget> {
     fn from(obj: Element) -> Option<web_sys::EventTarget> {
         if let Some(el) = obj.el {
@@ -546,17 +534,7 @@ impl From<Element> for Option<web_sys::EventTarget> {
         }
     }
 }
-/*
-impl From<Element> for Option<web_sys::HtmlInputElement> {
-    fn from(obj: Element) -> Option<web_sys::HtmlInputElement> {
-        if let Some(el) = obj.el {
-            el.into()
-        } else {
-            None
-        }
-    }
-}
-*/
+
 impl Element {
     fn qs(selector: &str) -> Option<Element> {
         let body: web_sys::Element = web_sys::window()?.document()?.body()?.into();
@@ -592,72 +570,69 @@ impl Element {
     ) where
         T: 'static + FnMut(web_sys::Event) -> (),
     {
-        let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            dbg("got fn call delegated");
-            if let Some(target_element) = event.target() {
-                let dyn_el: Option<&web_sys::Element> =
-                    wasm_bindgen::JsCast::dyn_ref(&target_element);
-                if let Some(target_element) = dyn_el {
-                    if let Ok(potential_elements) = target_element.query_selector_all(selector) {
-                        //let hasMatch = Array.prototype.indexOf.call(potential_elements, target_element) >= 0;
-                        dbg("got fn call delegated arse");
-                        let mut has_match = false;
-                        dbg(format!("len: {} {}", potential_elements.length(), selector).as_str());
-                        for i in 0..potential_elements.length() {
-                            if let Some(el) = potential_elements.get(i) {
-                                has_match = true;
-                                break;
-                            }
-                        }
-
-                        if has_match {
-                            dbg("got fn call delegated match");
-                            //handler.call(target_element, event);
-                            handler(event);
-                        }
-                    }
-                }
-            }
-        }) as Box<FnMut(_)>);
-
         if let Some(el) = self.el.take() {
             //  if let Some(element_et) = self.into(): Option<web_sys::EventTarget> {
             //let element_et: web_sys::EventTarget = el.into();
             if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(&el): Option<&web_sys::EventTarget>
             {
-                dyn_el.add_event_listener_with_callback_and_bool(
-                    //element_et.add_event_listener_with_callback_and_bool(
-                    event,
-                    cb.as_ref().unchecked_ref(),
-                    use_capture,
-                );
-                cb.forget(); // TODO cycle collect
+                //let rc_el = Rc::new(el);
+                //let cl_el = rc_el.clone();
+                if let Some(window) = web_sys::window() {
+                    if let Some(document) = window.document() {
+                        //let tg_el: web_sys::Element = self.el;
+                        // TODO document selector to the target element
+                        let tg_el = document;
+
+                        let cb = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                            dbg("got fn call delegated");
+                            if let Some(target_element) = event.target() {
+                                let dyn_target_el: Option<
+                                    &web_sys::Node,
+                                > = wasm_bindgen::JsCast::dyn_ref(&target_element);
+                                if let Some(target_element) = dyn_target_el {
+                                    if let Ok(potential_elements) =
+                                        tg_el.query_selector_all(selector)
+                                    {
+                                        //let hasMatch = Array.prototype.indexOf.call(potential_elements, target_element) >= 0;
+                                        dbg("got fn call delegated arse");
+                                        let mut has_match = false;
+                                        dbg(format!(
+                                            "len: {} {}",
+                                            potential_elements.length(),
+                                            selector
+                                        ).as_str());
+                                        for i in 0..potential_elements.length() {
+                                            if let Some(el) = potential_elements.get(i) {
+                                                if target_element.is_equal_node(Some(&el)) {
+                                                    has_match = true;
+                                                }
+                                                break;
+                                            }
+                                        }
+
+                                        if has_match {
+                                            dbg("got fn call delegated match");
+                                            //handler.call(target_element, event);
+                                            handler(event);
+                                        }
+                                    }
+                                }
+                            }
+                        }) as Box<FnMut(_)>);
+
+                        dyn_el.add_event_listener_with_callback_and_bool(
+                            //element_et.add_event_listener_with_callback_and_bool(
+                            event,
+                            cb.as_ref().unchecked_ref(),
+                            use_capture,
+                        );
+                        cb.forget(); // TODO cycle collect
+                    }
+                }
             }
-            //if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref(element_et): web_sys::Element {
             self.el = Some(el);
-            //}
         }
-        // TODO
-    /*
-    	// Attach a handler to event for all elements that match the selector,
-    	// now or in the future, based on a root element
-    	window.$delegate = function (target, selector, type, handler) {
-        let cb = Closure::wrap(Box::new(move |event| {
-    		  	let target_element = event.target();
-    		  	let potentialElements = window.qsa(selector, target);
-    		  	let hasMatch = Array.prototype.indexOf.call(potentialElements, targetElement) >= 0;
-    
-    		  	if (hasMatch) {
-    		  		handler.call(targetElement, event);
-    		  	}
-        }) as Box<FnMut(_)>);
-    
-    		// https://developer.mozilla.org/en-US/docs/Web/Events/blur
-    		let use_capture = type == 'blur' || type == 'focus';
-    
-        target.add_event_listener_with_callback(type, cb.as_ref().unchecked_ref(), use_capture);
-    };
-    */    }
+    }
 
     fn qs_from(&mut self, selector: &str) -> Option<web_sys::Element> {
         let el = self.el.take();
@@ -679,66 +654,6 @@ fn set_visibility(el: &web_sys::Element, visible: bool) {
 
 fn create_element(tag: &str) -> Option<web_sys::Element> {
     web_sys::window()?.document()?.create_element(tag).ok()
-}
-
-fn escape_html(val: String) -> String {
-    // TODO escape me!
-    val
-}
-// export const escapeForHTML = s => s.replace(/[&<]/g, c => c === '&' ? '&amp;' : '&lt;');
-
-struct Template {}
-
-impl Template {
-    /**
-     * Format the contents of a todo list.
-     *
-     * @param {ItemList} items Object containing keys you want to find in the template to replace.
-     * @returns {!string} Contents for a todo list
-     *
-     * @example
-     * view.show({
-     *	id: 1,
-     *	title: "Hello World",
-     *	completed: false,
-     * })
-     */
-    fn item_list(items: ItemList) -> String {
-        let mut output = String::from("");
-        for item in items.iter() {
-            let completed_class = if item.completed {
-                "class=\"completed\""
-            } else {
-                ""
-            };
-            let checked = if item.completed { "checked" } else { "" };
-            let title = escape_html(item.title.clone());
-            output.push_str(&format!(
-                r#"
-  <li data-id="{}"{}>
-  	<div class="view">
-  		<input class="toggle" type="checkbox" {}>
-  		<label>{}</label>
-  		<button class="destroy"></button>
-  	</div>
-  </li>"#,
-                item.id, completed_class, checked, title
-            ));
-        }
-        output
-    }
-
-    /**
-     * Format the contents of an "items left" indicator.
-     *
-     * @param {number} activeTodos Number of active todos
-     *
-     * @returns {!string} Contents for an "items left" indicator
-     */
-    fn item_counter(active_todos: usize) -> String {
-        let plural = if active_todos > 1 { "s" } else { "" };
-        return format!("{} item{} left", active_todos, plural);
-    }
 }
 
 impl Drop for View {

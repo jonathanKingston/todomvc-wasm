@@ -9,7 +9,6 @@ use std::rc::Weak;
 
 pub struct Controller {
     store: Store,
-    view: Option<View>,
     sched: RefCell<Option<Weak<Scheduler>>>,
     active_route: String,
     last_active_route: String,
@@ -18,32 +17,22 @@ pub struct Controller {
 pub enum ControllerMessage {
     AddItem(String),
     SetPage(String),
-    EditItemSave(usize, String),
-    ToggleItem(usize, bool),
-    EditItemCancel(usize),
+    EditItemSave(String, String),
+    ToggleItem(String, bool),
+    EditItemCancel(String),
     RemoveCompleted(),
-    RemoveItem(usize),
+    RemoveItem(String),
     ToggleAll(bool),
 }
 
 impl Controller {
-    pub fn new(store: Store, view: Option<View>, sched: Weak<Scheduler>) -> Controller {
+    pub fn new(store: Store, sched: Weak<Scheduler>) -> Controller {
         Controller {
             store,
-            view,
             sched: RefCell::new(Some(sched)),
             active_route: "".into(),
             last_active_route: "".into(),
         }
-        /* 
-  		view.bind_remove_item(controller.remove_item);
-  		view.bind_remove_completed(controller.removeCompletedItems.bind(controller));
-*/
-    }
-
-    /// Take ownership of the view
-    pub fn set_view(&mut self, view: View) {
-        self.view = Some(view);
     }
 
     pub fn call(&mut self, method_name: ControllerMessage) {
@@ -54,13 +43,13 @@ impl Controller {
             EditItemSave(id, value) => self.edit_item_save(id, value),
             EditItemCancel(id) => self.edit_item_cancel(id),
             RemoveCompleted() => self.remove_completed_items(),
-            RemoveItem(id) => self.remove_item(id),
+            RemoveItem(id) => self.remove_item(&id),
             ToggleAll(completed) => self.toggle_all(completed),
             ToggleItem(id, completed) => self.toggle_item(id, completed),
         }
     }
 
-    fn toggle_item(&mut self, id: usize, completed: bool) {
+    fn toggle_item(&mut self, id: String, completed: bool) {
         self.toggle_completed(id, completed);
         self._filter(completed);
     }
@@ -74,20 +63,19 @@ impl Controller {
     }
 
     pub fn set_page(&mut self, raw: String) {
-        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "hay 2"));
-        web_sys::console::log_1(&v);
-        let route = raw.replace(r#"/^#\//"#, "");
-        self.active_route = route.clone();
+        let route = raw.trim_left_matches("#/");
+        dbg(&format!("got route: {}", route));
+        self.active_route = route.to_string();
         self._filter(false);
         let v = wasm_bindgen::JsValue::from_str(&format!("{}", "controller 22"));
         web_sys::console::log_1(&v);
-        self.add_message(ViewMessage::UpdateFilterButtons(route));
+        self.add_message(ViewMessage::UpdateFilterButtons(route.to_string()));
     }
 
     /// Add an Item to the Store and display it in the list.
     fn add_item(&mut self, title: String) {
         self.store.insert(Item {
-            id: Date::now() as usize,
+            id: format!("{}", Date::now()),
             title,
             completed: false,
         });
@@ -96,39 +84,40 @@ impl Controller {
     }
 
     /// Save an Item in edit.
-    fn edit_item_save(&mut self, id: usize, title: String) {
+    fn edit_item_save(&mut self, id: String, title: String) {
+        let sitem = id.to_string();
         if !title.is_empty() {
             self.store.update(ItemUpdate::Title {
-                id,
+                id: id.clone(),
                 title: title.clone(),
             });
-            if let Some(ref mut view) = self.view {
-                view.edit_item_done(id, &title);
-            }
+            self.add_message(ViewMessage::EditItemDone(id.to_string(), title.to_string()));
         } else {
-            self.remove_item(id);
+            self.remove_item(&id);
         }
     }
 
     /// Cancel the item editing mode.
-    fn edit_item_cancel(&mut self, id: usize) {
-        if let Some(data) = self.store.find(ItemQuery::Id { id }) {
+    fn edit_item_cancel(&mut self, id: String) {
+        let mut message = None;
+        if let Some(data) = self.store.find(ItemQuery::Id { id: id.clone() }) {
             if let Some(todo) = data.get(0) {
-                let title = &todo.title;
-                if let Some(ref mut view) = self.view {
-                    view.edit_item_done(id, &title);
-                }
+                let title = todo.title.to_string();
+                let citem = id.to_string();
+                message = Some(ViewMessage::EditItemDone(citem, title));
             }
+        }
+        if let Some(message) = message {
+            self.add_message(message);
         }
     }
 
     /// Remove the data and elements related to an Item.
-    fn remove_item(&mut self, id: usize) {
-        self.store.remove(ItemQuery::Id { id });
+    fn remove_item(&mut self, id: &String) {
+        self.store.remove(ItemQuery::Id { id: id.clone() });
         self._filter(false);
-        if let Some(ref mut view) = self.view {
-            view.remove_item(id);
-        }
+        let ritem = id.to_string();
+        self.add_message(ViewMessage::RemoveItem(ritem));
     }
 
     /// Remove all completed items.
@@ -138,11 +127,13 @@ impl Controller {
     }
 
     /// Update an Item in storage based on the state of completed.
-    fn toggle_completed(&mut self, id: usize, completed: bool) {
-        self.store.update(ItemUpdate::Completed { id, completed });
-        if let Some(ref mut view) = self.view {
-            view.set_item_complete(id, completed);
-        }
+    fn toggle_completed(&mut self, id: String, completed: bool) {
+        self.store.update(ItemUpdate::Completed {
+            id: id.clone(),
+            completed,
+        });
+        let tid = id.to_string();
+        self.add_message(ViewMessage::SetItemComplete(tid, completed));
     }
 
     /// Set all items to complete or active.
@@ -153,11 +144,11 @@ impl Controller {
                 completed: !completed,
             }).map(|data| {
                 for item in data.iter() {
-                    vals.push(item.id);
+                    vals.push(item.id.clone());
                 }
             });
         for id in vals.iter() {
-            self.toggle_completed(*id, completed);
+            self.toggle_completed(id.to_string(), completed);
         }
         self._filter(false);
     }
@@ -185,15 +176,11 @@ impl Controller {
         }
 
         if let Some((total, active, completed)) = self.store.count() {
-            dbg("heyee4");
             self.add_message(ViewMessage::SetItemsLeft(active));
-            dbg("heyee3");
             self.add_message(ViewMessage::SetClearCompletedButtonVisibility(
                 completed > 0,
             ));
-            dbg("heyee2");
             self.add_message(ViewMessage::SetCompleteAllCheckbox(completed == total));
-            dbg("heyee 1");
             self.add_message(ViewMessage::SetMainVisibility(total > 0));
         }
 

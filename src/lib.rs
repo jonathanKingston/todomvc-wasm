@@ -11,6 +11,7 @@ use std::rc::Rc;
 pub mod controller;
 pub mod scheduler;
 pub mod store;
+pub mod template;
 pub mod view;
 use crate::controller::{Controller, ControllerMessage};
 use crate::scheduler::Scheduler;
@@ -31,15 +32,12 @@ fn app(name: &str) -> Option<()> {
     use std::borrow::Borrow;
     let sched = Rc::new(Scheduler::new());
     let store = Store::new(name)?;
-    let controller = Controller::new(store, None, Rc::downgrade(&sched));
+    let controller = Controller::new(store, Rc::downgrade(&sched));
     let mut view = View::new(sched.clone())?;
     let sch: &Rc<Scheduler> = sched.borrow();
     view.init();
     sch.set_view(view);
     sch.set_controller(controller);
-    sched.add_message(Message::Controller(ControllerMessage::AddItem(
-        "boop".into(),
-    )));
     sched.add_message(Message::Controller(ControllerMessage::SetPage(
         "".to_string(),
     )));
