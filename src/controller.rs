@@ -33,7 +33,7 @@ impl Controller {
             store,
             sched: RefCell::new(Some(sched)),
             active_route: "".into(),
-            last_active_route: "".into(),
+            last_active_route: "none".into(),
         }
     }
 
@@ -124,7 +124,7 @@ impl Controller {
     /// Remove all completed items.
     fn remove_completed_items(&mut self) {
         self.store.remove(ItemQuery::Completed { completed: true });
-        self._filter(false);
+        self._filter(true);
     }
 
     /// Update an Item in storage based on the state of completed.
@@ -141,9 +141,13 @@ impl Controller {
     fn toggle_all(&mut self, completed: bool) {
         let mut vals = Vec::new();
         self.store
+            .find(
+                ItemQuery::EmptyItemQuery, /*
+  The JS version did this?
             .find(ItemQuery::Completed {
                 completed: !completed,
-            }).map(|data| {
+*/
+            ).map(|data| {
                 for item in data.iter() {
                     vals.push(item.id.clone());
                 }

@@ -11,12 +11,8 @@ The core differences are:
 
 ##  TODO known bugs
 
-- Refresh now doesn't show the results despite being stored
-- Check all doens't work
-- filter and delete sometimes list the wrong number of items
 - HTML isn't being escaped!!!11
   - Ideally should just create the elements instead
-- JS docblocks need rewriting`
 
 ## Size
 

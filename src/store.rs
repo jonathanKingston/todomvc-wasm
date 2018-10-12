@@ -144,7 +144,7 @@ impl Store {
         if let Some(todos) = self.data.take() {
             let todos = todos
                 .into_iter()
-                .filter(|todo| query.matches(todo))
+                .filter(|todo| !query.matches(todo))
                 .collect();
             self.set_local_storage(todos);
         }

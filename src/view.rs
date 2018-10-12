@@ -92,14 +92,11 @@ impl View {
     pub fn init(&mut self) {
         if let Some(window) = web_sys::window() {
             if let Some(document) = window.document() {
-                dbg("got doc");
-
                 let sched = self.sched.clone();
                 let set_page = Closure::wrap(Box::new(move || {
                     dbg("new hash");
                     if let Some(location) = document.location() {
                         if let Ok(hash) = location.hash() {
-                            dbg("calling");
                             // TODO refactor back into fn
                             // Was: &self.add_message(ControllerMessage::SetPage(hash));
                             if let Ok(sched) = &(sched.try_borrow_mut()) {
@@ -206,7 +203,6 @@ impl View {
     fn remove_item(&mut self, id: String) {
         let elem = Element::qs(&View::get_selector_string(id));
 
-        dbg("removing node -a");
         if let Some(elem) = elem {
             self.todo_list.remove_child(elem);
         }
@@ -316,7 +312,7 @@ impl View {
 
     fn bind_toggle_all(&mut self) {
         let sched = self.sched.clone();
-        self.clear_completed
+        self.toggle_all
             .add_event_listener("click", move |event: web_sys::Event| {
                 if let Some(target) = event.target() {
                     if let Some(input_el) =
@@ -392,11 +388,9 @@ impl View {
                                 wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                             {
                                 if let Some(item) = item_id(&target) {
-                                    dbg("calling -a");
                                     // TODO refactor back into fn
                                     // Was: &self.add_message(ControllerMessage::SetPage(hash));
                                     if let Ok(sched) = &(sched.try_borrow_mut()) {
-                                        dbg("sending -a");
                                         sched.add_message(Message::Controller(
                                             ControllerMessage::EditItemSave(item, input_el.value()),
                                         ));
