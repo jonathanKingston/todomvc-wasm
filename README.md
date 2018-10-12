@@ -17,3 +17,11 @@ The core differences are:
 - HTML isn't being escaped!!!11
   - Ideally should just create the elements instead
 - JS docblocks need rewriting`
+
+## Size
+
+The size of the project hasn't undergone much work to make it optimised yet.
+
+~96kb release build
+~76kb optimised with binaryen
+~28kb brotli compressed

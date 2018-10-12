@@ -102,12 +102,11 @@ impl View {
                             dbg("calling");
                             // TODO refactor back into fn
                             // Was: &self.add_message(ControllerMessage::SetPage(hash));
-                            // Also remove borrow_mut in favour of try_borrow_mut
-
-                            dbg("sending");
-                            let sched = &(*sched.borrow_mut());
-                            sched
-                                .add_message(Message::Controller(ControllerMessage::SetPage(hash)));
+                            if let Ok(sched) = &(sched.try_borrow_mut()) {
+                                sched.add_message(Message::Controller(ControllerMessage::SetPage(
+                                    hash,
+                                )));
+                            }
                             // TODO refactor back into fn
                         }
                     }
@@ -195,9 +194,17 @@ impl View {
         self.todo_list.set_inner_html(Template::item_list(&items));
     }
 
+    /// Gets the selector to find a todo item in the DOM
+    fn get_selector_string(id: String) -> String {
+        let mut selector = String::from("[data-id=\"");
+        selector.push_str(id.as_str());
+        selector.push_str("\"]");
+        selector
+    }
+
     /// Remove an item from the view.
     fn remove_item(&mut self, id: String) {
-        let elem = Element::qs(&format!("[data-id=\"{}\"]", id));
+        let elem = Element::qs(&View::get_selector_string(id));
 
         dbg("removing node -a");
         if let Some(elem) = elem {
@@ -232,7 +239,12 @@ impl View {
         if let Some(mut el) = Element::qs(".filters .selected") {
             el.set_class_name(String::new());
         }
-        if let Some(mut el) = Element::qs(&format!(".filters [href=\"#{}\"]", route)) {
+
+        let mut selector = String::from(".filters [href=\"");
+        selector.push_str(route.as_str());
+        selector.push_str("\"]");
+
+        if let Some(mut el) = Element::qs(&selector) {
             el.set_class_name(String::from("selected"));
         }
     }
@@ -244,7 +256,7 @@ impl View {
 
     /// Render an item as either completed or not.
     fn set_item_complete(&self, id: String, completed: bool) {
-        if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
+        if let Some(mut list_item) = Element::qs(&View::get_selector_string(id)) {
             let class_name = if completed { "completed" } else { "" };
             list_item.set_class_name(String::from(class_name));
 
@@ -257,7 +269,7 @@ impl View {
 
     /// Bring an item out of edit mode.
     fn edit_item_done(&self, id: String, title: String) {
-        if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
+        if let Some(mut list_item) = Element::qs(&View::get_selector_string(id)) {
             if let Some(input) = list_item.qs_from("input.edit") {
                 list_item.class_list_remove(String::from("editing"));
 
@@ -280,10 +292,11 @@ impl View {
                     let v = input_el.value(); // TODO remove with nll
                     let title = v.trim();
                     if title != "" {
-                        let sched = &(*sched.borrow_mut());
-                        sched.add_message(Message::Controller(ControllerMessage::AddItem(
-                            String::from(title),
-                        )));
+                        if let Ok(sched) = &(sched.try_borrow_mut()) {
+                            sched.add_message(Message::Controller(ControllerMessage::AddItem(
+                                String::from(title),
+                            )));
+                        }
                     }
                 }
             }
@@ -294,8 +307,9 @@ impl View {
     fn bind_remove_completed(&mut self) {
         let sched = self.sched.clone();
         let handler = move |_| {
-            let sched = &(*sched.borrow_mut());
-            sched.add_message(Message::Controller(ControllerMessage::RemoveCompleted()));
+            if let Ok(sched) = &(sched.try_borrow_mut()) {
+                sched.add_message(Message::Controller(ControllerMessage::RemoveCompleted()));
+            }
         };
         self.clear_completed.add_event_listener("click", handler);
     }
@@ -308,10 +322,11 @@ impl View {
                     if let Some(input_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
-                        let sched = &(*sched.borrow_mut());
-                        sched.add_message(Message::Controller(ControllerMessage::ToggleAll(
-                            input_el.checked(),
-                        )));
+                        if let Ok(sched) = &(sched.try_borrow_mut()) {
+                            sched.add_message(Message::Controller(ControllerMessage::ToggleAll(
+                                input_el.checked(),
+                            )));
+                        }
                     }
                 }
             });
@@ -325,10 +340,11 @@ impl View {
             move |e: web_sys::Event| {
                 if let Some(target) = e.target() {
                     if let Some(item_id) = item_id(&target) {
-                        let sched = &(*sched.borrow_mut());
-                        sched.add_message(Message::Controller(ControllerMessage::RemoveItem(
-                            item_id,
-                        )));
+                        if let Ok(sched) = &(sched.try_borrow_mut()) {
+                            sched.add_message(Message::Controller(ControllerMessage::RemoveItem(
+                                item_id,
+                            )));
+                        }
                     }
                 }
             },
@@ -347,11 +363,11 @@ impl View {
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
                         if let Some(item_id) = item_id(&target) {
-                            let sched = &(*sched.borrow_mut());
-                            sched.add_message(Message::Controller(ControllerMessage::ToggleItem(
-                                item_id,
-                                input_el.checked(),
-                            )));
+                            if let Ok(sched) = &(sched.try_borrow_mut()) {
+                                sched.add_message(Message::Controller(
+                                    ControllerMessage::ToggleItem(item_id, input_el.checked()),
+                                ));
+                            }
                         }
                     }
                 }
@@ -379,11 +395,12 @@ impl View {
                                     dbg("calling -a");
                                     // TODO refactor back into fn
                                     // Was: &self.add_message(ControllerMessage::SetPage(hash));
-                                    let sched = &(*sched.borrow_mut());
-                                    dbg("sending -a");
-                                    sched.add_message(Message::Controller(
-                                        ControllerMessage::EditItemSave(item, input_el.value()),
-                                    ));
+                                    if let Ok(sched) = &(sched.try_borrow_mut()) {
+                                        dbg("sending -a");
+                                        sched.add_message(Message::Controller(
+                                            ControllerMessage::EditItemSave(item, input_el.value()),
+                                        ));
+                                    }
 
                                     // TODO refactor back into fn
                                 }
@@ -433,10 +450,11 @@ impl View {
                             }
 
                             if let Some(item_id) = item_id(&target) {
-                                let sched = &(*sched.borrow_mut());
-                                sched.add_message(Message::Controller(
-                                    ControllerMessage::EditItemCancel(item_id),
-                                ));
+                                if let Ok(sched) = &(sched.try_borrow_mut()) {
+                                    sched.add_message(Message::Controller(
+                                        ControllerMessage::EditItemCancel(item_id),
+                                    ));
+                                }
                             }
                         }
                     }

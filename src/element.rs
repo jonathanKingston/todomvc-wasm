@@ -87,11 +87,13 @@ impl Element {
                                         tg_el.query_selector_all(selector)
                                     {
                                         let mut has_match = false;
+                                        /*
                                         dbg(format!(
                                             "len: {} {}",
                                             potential_elements.length(),
                                             selector
                                         ).as_str());
+*/
                                         for i in 0..potential_elements.length() {
                                             if let Some(el) = potential_elements.get(i) {
                                                 if target_element.is_equal_node(Some(&el)) {

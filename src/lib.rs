@@ -59,7 +59,7 @@ fn app(name: &str) -> Option<()> {
     Some(())
 }
 
-/// Entry point into the program from JavaScript 
+/// Entry point into the program from JavaScript
 #[wasm_bindgen]
 pub fn run() {
     app("todos-wasmbindgen");

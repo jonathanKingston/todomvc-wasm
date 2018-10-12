@@ -47,6 +47,10 @@ impl Template {
     /// Returns the contents for an "items left" indicator
     pub fn item_counter(active_todos: usize) -> String {
         let plural = if active_todos > 1 { "s" } else { "" };
-        return format!("{} item{} left", active_todos, plural);
+        let mut template = active_todos.to_string();
+        template.push_str(" item");
+        template.push_str(plural);
+        template.push_str(" left");
+        template
     }
 }

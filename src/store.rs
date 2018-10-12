@@ -1,11 +1,6 @@
+use crate::dbg;
 use js_sys::JSON;
 use wasm_bindgen::prelude::*;
-//use crate::DefinePropertyAttrs;
-// TODO remove
-fn dbg(mssg: &str) {
-    let v = wasm_bindgen::JsValue::from_str(&format!("{}", mssg));
-    web_sys::console::log_1(&v);
-}
 
 /// Stores items into localstorage
 pub struct Store {
@@ -52,11 +47,11 @@ impl Store {
                             if let Some(item) = item {
                                 if let Some(title) = item.shift().as_string() {
                                     if let Some(completed) = item.shift().as_bool() {
-                                        if let Some(id) = item.shift().as_f64() {
+                                        if let Some(id) = item.shift().as_string() {
                                             let mut temp_item = Item {
                                                 title,
                                                 completed,
-                                                id: format!("{}", id),
+                                                id,
                                             };
                                             item_list.push(temp_item);
                                         }
@@ -79,7 +74,7 @@ impl Store {
         let array = js_sys::Array::new();
         for item in todos.iter() {
             let mut child = js_sys::Array::new();
-            let s = String::from(item.title.clone());
+            let s = item.title.clone();
             child.push(&JsValue::from(&s));
             child.push(&JsValue::from(item.completed));
             child.push(&JsValue::from(item.id.to_string()));

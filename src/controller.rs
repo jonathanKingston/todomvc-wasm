@@ -15,6 +15,7 @@ pub struct Controller {
     last_active_route: String,
 }
 
+/// Messages that represent the methods to be called on the Controller
 pub enum ControllerMessage {
     AddItem(String),
     SetPage(String),
@@ -68,18 +69,15 @@ impl Controller {
 
     pub fn set_page(&mut self, raw: String) {
         let route = raw.trim_left_matches("#/");
-        dbg(&format!("got route: {}", route));
         self.active_route = route.to_string();
         self._filter(false);
-        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "controller 22"));
-        web_sys::console::log_1(&v);
         self.add_message(ViewMessage::UpdateFilterButtons(route.to_string()));
     }
 
     /// Add an Item to the Store and display it in the list.
     fn add_item(&mut self, title: String) {
         self.store.insert(Item {
-            id: format!("{}", Date::now()),
+            id: Date::now().to_string(),
             title,
             completed: false,
         });
