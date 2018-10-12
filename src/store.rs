@@ -7,6 +7,7 @@ fn dbg(mssg: &str) {
     web_sys::console::log_1(&v);
 }
 
+/// Stores items into localstorage
 pub struct Store {
     local_storage: web_sys::Storage,
     data: Option<ItemList>,
@@ -14,10 +15,7 @@ pub struct Store {
 }
 
 impl Store {
-    /**
-     * @param {!string} name Database name
-     * @param {function()} [callback] Called when the Store is ready
-     */
+    /// Creates a new store with `name` as the localstorage value name
     pub fn new(name: &str) -> Option<Store> {
         if let Some(window) = web_sys::window() {
             if let Ok(Some(local_storage)) = window.local_storage() {
@@ -35,8 +33,11 @@ impl Store {
     }
 
     /// Read the local ItemList from localStorage.
-    /// @returns {ItemList} Current array of todos
+    /// Returns an &Option<ItemList> of the stored database
+    /// Caches the store into `self.data` to reduce calls to JS
+    ///
     /// Uses mut here as the return is something we might want to manipulate
+    ///
     fn get_local_storage(&mut self) -> &Option<ItemList> {
         let mut item_list = ItemList::new();
         if let Some(ref _data) = self.data {
@@ -72,7 +73,8 @@ impl Store {
     }
 
     /// Write the local ItemList to localStorage.
-    /// @param {ItemList} todos Array of todos to write
+    ///
+    /// todos `ItemList` is the items to store
     fn set_local_storage(&mut self, todos: ItemList) {
         let array = js_sys::Array::new();
         for item in todos.iter() {
@@ -80,7 +82,7 @@ impl Store {
             let s = String::from(item.title.clone());
             child.push(&JsValue::from(&s));
             child.push(&JsValue::from(item.completed));
-            child.push(&JsValue::from(format!("{}", item.id)));
+            child.push(&JsValue::from(item.id.to_string()));
 
             array.push(&JsValue::from(child));
         }
@@ -94,15 +96,12 @@ impl Store {
     }
 
     /// Find items with properties matching those on query.
-    /*
-     * @param {ItemQuery} query Query to match
-     * @param {function(ItemList)} callback Called when the query is done
-     *
-     * @example
-     * db.find({completed: true}, data => {
-     *	 // data shall contain items whose completed properties are true
-     * })
-     */
+    /// `ItemQuery` query Query to match
+    ///
+    /// ```
+    ///  let data = db.find(ItemQuery::Completed {completed: true});
+    ///	 // data will contain items whose completed properties are true
+    /// ```
     pub fn find(&mut self, query: ItemQuery) -> Option<ItemListSlice> {
         self.get_local_storage();
         if let Some(ref todos) = self.data {
@@ -113,10 +112,8 @@ impl Store {
     }
 
     /// Update an item in the Store.
-    /**
-     * @param {ItemUpdate} update Record with an id and a property to update
-     * @param {function()} [callback] Called when partialRecord is applied
-     */
+    ///
+    /// `ItemUpdate` update Record with an id and a property to update
     pub fn update(&mut self, update: ItemUpdate) {
         let id = update.id();
         self.get_local_storage();
@@ -135,24 +132,18 @@ impl Store {
     }
 
     /// Insert an item into the Store.
-    /**
-     * @param {Item} item Item to insert
-     * @param {function()} [callback] Called when item is inserted
-     */
+    ///
+    /// `Item` item Item to insert
     pub fn insert(&mut self, item: Item) {
         self.get_local_storage();
-        self.data.take().map(|mut todos| {
+        if let Some(mut todos) = self.data.take() {
             todos.push(item);
             self.set_local_storage(todos);
-        });
+        }
     }
 
-    /**
-     * Remove items from the Store based on a query.
-     *
-     * @param {ItemQuery} query Query matching the items to remove
-     * @param {function(ItemList)|function()} [callback] Called when records matching query are removed
-     */
+    /// Remove items from the Store based on a query.
+    /// query is an `ItemQuery` query Query matching the items to remove
     pub fn remove(&mut self, query: ItemQuery) {
         self.get_local_storage();
         if let Some(todos) = self.data.take() {
@@ -180,6 +171,7 @@ impl Store {
     }
 }
 
+/// Represents a todo item
 pub struct Item {
     pub id: String,
     pub title: String,
@@ -207,6 +199,7 @@ pub trait ItemListTrait<T> {
     fn iter(&self) -> std::slice::Iter<T>;
 }
 
+/// A list of todo items
 pub struct ItemList {
     list: Vec<Item>,
 }
@@ -244,6 +237,7 @@ impl<'a> FromIterator<Item> for ItemList {
     }
 }
 
+/// A borrowed set of Items filtered from the store
 pub struct ItemListSlice<'a> {
     list: Vec<&'a Item>,
 }
@@ -272,6 +266,7 @@ impl<'a> ItemListTrait<&'a Item> for ItemListSlice<'a> {
         self.list.iter()
     }
 }
+
 impl<'a> FromIterator<&'a Item> for ItemListSlice<'a> {
     fn from_iter<I: IntoIterator<Item = &'a Item>>(iter: I) -> Self {
         let mut c = ItemListSlice::new();
@@ -281,6 +276,7 @@ impl<'a> FromIterator<&'a Item> for ItemListSlice<'a> {
         c
     }
 }
+
 impl<'a> Into<ItemList> for ItemListSlice<'a> {
     fn into(self) -> ItemList {
         let mut i = ItemList::new();
@@ -298,11 +294,13 @@ impl<'a> Into<ItemList> for ItemListSlice<'a> {
     }
 }
 
+/// Represents a search into the store
 pub enum ItemQuery {
     Id { id: String },
     Completed { completed: bool },
     EmptyItemQuery,
 }
+
 impl ItemQuery {
     fn matches(&self, item: &Item) -> bool {
         match *self {
@@ -317,11 +315,12 @@ pub enum ItemUpdate {
     Title { id: String, title: String },
     Completed { id: String, completed: bool },
 }
+
 impl ItemUpdate {
     fn id(&self) -> String {
         match self {
             ItemUpdate::Title { id, .. } => id.clone(),
             ItemUpdate::Completed { id, .. } => id.clone(),
-        }.into()
+        }
     }
 }

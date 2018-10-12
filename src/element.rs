@@ -3,6 +3,7 @@ extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+/// Wrapper for `web_sys::Element` to simplify calling different interfaces
 pub struct Element {
     el: Option<web_sys::Element>,
 }
@@ -34,6 +35,7 @@ impl Element {
         Some(Element { el })
     }
 
+    /// Add event listener to this node
     pub fn add_event_listener<T>(&mut self, event_name: &str, handler: T)
     where
         // TODO rewrite without static
@@ -51,10 +53,9 @@ impl Element {
     }
 
     // TODO fix static lifetimes
+    /// Delegate an event to a selector
     pub fn delegate<T>(
         &mut self,
-        // element: web_sys::Element,
-        // element: Element,
         selector: &'static str,
         event: &str,
         mut handler: T,
@@ -85,8 +86,6 @@ impl Element {
                                     if let Ok(potential_elements) =
                                         tg_el.query_selector_all(selector)
                                     {
-                                        //let hasMatch = Array.prototype.indexOf.call(potential_elements, target_element) >= 0;
-                                        dbg("got fn call delegated arse");
                                         let mut has_match = false;
                                         dbg(format!(
                                             "len: {} {}",
@@ -103,8 +102,6 @@ impl Element {
                                         }
 
                                         if has_match {
-                                            dbg("got fn call delegated match");
-                                            //handler.call(target_element, event);
                                             handler(event);
                                         }
                                     }
@@ -126,6 +123,7 @@ impl Element {
         }
     }
 
+    /// Find child `Element`s from this node
     pub fn qs_from(&mut self, selector: &str) -> Option<Element> {
         let mut found_el = None;
         if let Some(el) = self.el.take() {
@@ -137,6 +135,7 @@ impl Element {
         found_el
     }
 
+    /// Sets the inner HTML of the `self.el` element
     pub fn set_inner_html(&mut self, value: String) {
         if let Some(el) = self.el.take() {
             el.set_inner_html(&value);
@@ -144,6 +143,7 @@ impl Element {
         }
     }
 
+    /// Sets the text content of the `self.el` element
     pub fn set_text_content(&mut self, value: String) {
         if let Some(el) = self.el.take() {
             if let Some(node) = wasm_bindgen::JsCast::dyn_ref(&el): Option<&web_sys::Node> {
@@ -153,6 +153,12 @@ impl Element {
         }
     }
 
+    /// Removes a class list item from the element
+    ///
+    /// ```
+    /// e.class_list_remove(String::from("clickable"));
+    /// // removes the class 'clickable' from e.el
+    /// ```
     pub fn class_list_remove(&mut self, value: String) {
         if let Some(el) = self.el.take() {
             el.class_list().remove_1(&value);
@@ -160,6 +166,7 @@ impl Element {
         }
     }
 
+    /// Given another `Element` it will remove that child from the DOM from this element
     pub fn remove_child(&mut self, mut child: Element) {
         if let Some(child_el) = child.el.take() {
             if let Some(el) = self.el.take() {
@@ -172,6 +179,7 @@ impl Element {
         }
     }
 
+    /// Sets the whole class value for `self.el`
     pub fn set_class_name(&mut self, class_name: String) {
         if let Some(el) = self.el.take() {
             el.set_class_name(&class_name);
@@ -179,6 +187,7 @@ impl Element {
         }
     }
 
+    /// Sets the visibility for the element in `self.el`
     pub fn set_visibility(&mut self, visible: bool) {
         if let Some(el) = self.el.take() {
             {
@@ -191,6 +200,7 @@ impl Element {
         }
     }
 
+    /// Sets the visibility for the element in `self.el` (The element must be an input)
     pub fn set_value(&mut self, value: String) {
         if let Some(el) = self.el.take() {
             if let Some(el) = wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&el) {
@@ -199,6 +209,7 @@ impl Element {
             self.el = Some(el);
         }
     }
+
     /* TODO use
     pub fn focus(&self) {
         if let Some(el) = self.el.take() {
@@ -210,6 +221,7 @@ impl Element {
     }
 */
 
+    /// Sets the checked state for the element in `self.el` (The element must be an input)
     pub fn set_checked(&mut self, checked: bool) {
         if let Some(el) = self.el.take() {
             if let Some(el) = wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&el) {

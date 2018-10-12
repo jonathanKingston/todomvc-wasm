@@ -14,6 +14,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    /// Construct a new `Scheduler`
     pub fn new() -> Scheduler {
         Scheduler {
             controller: Rc::new(RefCell::new(None)),
@@ -22,6 +23,7 @@ impl Scheduler {
             running: RefCell::new(false),
         }
     }
+
     pub fn set_controller(&self, controller: Controller) {
         if let Ok(mut controller_data) = self.controller.try_borrow_mut() {
             controller_data.replace(controller);
@@ -29,6 +31,7 @@ impl Scheduler {
             dbg("This might be a deadlock");
         }
     }
+
     pub fn set_view(&self, view: View) {
         if let Ok(mut view_data) = self.view.try_borrow_mut() {
             view_data.replace(view);
@@ -36,9 +39,11 @@ impl Scheduler {
             dbg("This might be a deadlock");
         }
     }
+
+    /// Add a new message onto the event stack
+    ///
+    /// Triggers running the event loop if it's not already running
     pub fn add_message(&self, message: Message) {
-        let v = wasm_bindgen::JsValue::from_str(&format!("{}", "got message"));
-        web_sys::console::log_1(&v);
         let running = {
             if let Ok(running) = self.running.try_borrow() {
                 running.clone()
@@ -58,6 +63,8 @@ impl Scheduler {
             self.run();
         }
     }
+
+    /// Start the event loop, taking messages from the stack to run
     fn run(&self) {
         let mut events_len = 0;
         {
@@ -84,6 +91,7 @@ impl Scheduler {
             self.next_message();
         }
     }
+
     fn next_message(&self) {
         let event = {
             if let Ok(mut events) = self.events.try_borrow_mut() {
@@ -115,12 +123,10 @@ impl Scheduler {
                 }
             }
             self.run();
+        } else if let Ok(mut running) = self.running.try_borrow_mut() {
+            *running = false;
         } else {
-            if let Ok(mut running) = self.running.try_borrow_mut() {
-                *running = false;
-            } else {
-                dbg("This might be a deadlock");
-            }
+            dbg("This might be a deadlock");
         }
     }
 }

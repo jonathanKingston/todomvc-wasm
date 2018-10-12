@@ -7,6 +7,7 @@ use js_sys::Date;
 use std::cell::RefCell;
 use std::rc::Weak;
 
+/// The controller of the application turns page state into functionality
 pub struct Controller {
     store: Store,
     sched: RefCell<Option<Weak<Scheduler>>>,
@@ -35,6 +36,7 @@ impl Controller {
         }
     }
 
+    /// Used by `Scheduler` to convert a `ControllerMessage` into a function call on a `Controller`
     pub fn call(&mut self, method_name: ControllerMessage) {
         use self::ControllerMessage::*;
         match method_name {
@@ -87,7 +89,6 @@ impl Controller {
 
     /// Save an Item in edit.
     fn edit_item_save(&mut self, id: String, title: String) {
-        let sitem = id.to_string();
         if !title.is_empty() {
             self.store.update(ItemUpdate::Title {
                 id: id.clone(),

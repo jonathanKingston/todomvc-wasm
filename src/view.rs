@@ -1,7 +1,7 @@
 use crate::controller::ControllerMessage;
 use crate::dbg;
 use crate::element::Element;
-use crate::store::{ItemList, ItemListTrait};
+use crate::store::ItemList;
 use crate::{Message, Scheduler};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,6 +15,7 @@ const ESCAPE_KEY: u32 = 27;
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
+/// Messages that represent the methods to be called on the View
 pub enum ViewMessage {
     UpdateFilterButtons(String),
     ClearNewTodo(),
@@ -28,12 +29,6 @@ pub enum ViewMessage {
     SetItemComplete(String, bool),
 }
 
-/**
-  TODO known bugs
-  - Refresh now doesn't show the results despite being stored
-  - filter and delete sometimes list the wrong number of items
-*/
-
 fn item_id(element: &web_sys::EventTarget) -> Option<String> {
     //TODO ugly reformat
     let dyn_el: Option<&web_sys::Node> = wasm_bindgen::JsCast::dyn_ref(element);
@@ -46,13 +41,12 @@ fn item_id(element: &web_sys::EventTarget) -> Option<String> {
                 }
             };
             if None == res {
-                let e_node: web_sys::Node = parent.into();
-                e_node.parent_node().map(|ep| {
+                if let Some(ep) = parent.parent_node() {
                     if let Some(dyn_el) = wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlElement>(&ep)
                     {
                         res = Some(dyn_el.dataset().get("id"));
                     }
-                });
+                }
             }
             res.unwrap()
         })
@@ -61,6 +55,7 @@ fn item_id(element: &web_sys::EventTarget) -> Option<String> {
     }
 }
 
+/// Presentation layer
 #[wasm_bindgen]
 pub struct View {
     sched: RefCell<Rc<Scheduler>>,
@@ -74,6 +69,7 @@ pub struct View {
 }
 
 impl View {
+    /// Construct a new view
     pub fn new(sched: Rc<Scheduler>) -> Option<View> {
         let todo_list = Element::qs(".todo-list")?;
         let todo_item_counter = Element::qs(".todo-count")?;
@@ -81,7 +77,7 @@ impl View {
         let main = Element::qs(".main")?;
         let toggle_all = Element::qs(".toggle-all")?;
         let new_todo = Element::qs(".new-todo")?;
-        let mut view = View {
+        Some(View {
             sched: RefCell::new(sched),
             todo_list,
             todo_item_counter,
@@ -90,13 +86,10 @@ impl View {
             toggle_all,
             new_todo,
             callbacks: Vec::new(),
-        };
-
-        Some(view)
+        })
     }
 
     pub fn init(&mut self) {
-        dbg("got init");
         if let Some(window) = web_sys::window() {
             if let Some(document) = window.document() {
                 dbg("got doc");
@@ -112,7 +105,7 @@ impl View {
                             // Also remove borrow_mut in favour of try_borrow_mut
 
                             dbg("sending");
-                            let ref sched = *sched.borrow_mut();
+                            let sched = &(*sched.borrow_mut());
                             sched
                                 .add_message(Message::Controller(ControllerMessage::SetPage(hash)));
                             // TODO refactor back into fn
@@ -121,15 +114,6 @@ impl View {
                 }) as Box<FnMut()>);
 
                 let window_et: web_sys::EventTarget = window.into();
-                /*
-                let c = set_page.as_ref().unchecked_ref();
-                window_et.add_event_listener_with_callback(
-                    "load",
-                    set_page.as_ref().unchecked_ref(),
-                );
-                self.callbacks.push((window_et, "load".to_string(), set_page));
-*/
-                dbg("about to add hashchange");
                 window_et.add_event_listener_with_callback(
                     "hashchange",
                     set_page.as_ref().unchecked_ref(),
@@ -148,7 +132,7 @@ impl View {
         }
     }
 
-    pub fn bind_edit_item(&mut self) {
+    fn bind_edit_item(&mut self) {
         self.todo_list.delegate(
             "li label",
             "dblclick",
@@ -187,6 +171,7 @@ impl View {
         }
     }
 
+    /// Used by scheduler to convert a `ViewMessage` into a function call on the `View`
     pub fn call(&mut self, method_name: ViewMessage) {
         use self::ViewMessage::*;
         match method_name {
@@ -206,14 +191,12 @@ impl View {
     }
 
     /// Populate the todo list with a list of items.
-    pub fn show_items(&mut self, items: ItemList) {
-        dbg("shhhhh");
-        // TODO what is items?
-        self.todo_list.set_inner_html(Template::item_list(items));
+    fn show_items(&mut self, items: ItemList) {
+        self.todo_list.set_inner_html(Template::item_list(&items));
     }
 
     /// Remove an item from the view.
-    pub fn remove_item(&mut self, id: String) {
+    fn remove_item(&mut self, id: String) {
         let elem = Element::qs(&format!("[data-id=\"{}\"]", id));
 
         dbg("removing node -a");
@@ -223,29 +206,29 @@ impl View {
     }
 
     /// Set the number in the 'items left' display.
-    pub fn set_items_left(&mut self, items_left: usize) {
+    fn set_items_left(&mut self, items_left: usize) {
         // TODO what is items left?
         self.todo_item_counter
             .set_inner_html(Template::item_counter(items_left));
     }
 
     /// Set the visibility of the "Clear completed" button.
-    pub fn set_clear_completed_button_visibility(&mut self, visible: bool) {
+    fn set_clear_completed_button_visibility(&mut self, visible: bool) {
         self.clear_completed.set_visibility(visible);
     }
 
     /// Set the visibility of the main content and footer.
-    pub fn set_main_visibility(&mut self, visible: bool) {
+    fn set_main_visibility(&mut self, visible: bool) {
         self.main.set_visibility(visible);
     }
 
     /// Set the checked state of the Complete All checkbox.
-    pub fn set_complete_all_checkbox(&mut self, checked: bool) {
+    fn set_complete_all_checkbox(&mut self, checked: bool) {
         self.toggle_all.set_checked(checked);
     }
 
     /// Change the appearance of the filter buttons based on the route.
-    pub fn update_filter_buttons(&self, route: String) {
+    fn update_filter_buttons(&self, route: String) {
         if let Some(mut el) = Element::qs(".filters .selected") {
             el.set_class_name(String::new());
         }
@@ -255,12 +238,12 @@ impl View {
     }
 
     /// Clear the new todo input
-    pub fn clear_new_todo(&mut self) {
+    fn clear_new_todo(&mut self) {
         self.new_todo.set_value(String::new());
     }
 
     /// Render an item as either completed or not.
-    pub fn set_item_complete(&self, id: String, completed: bool) {
+    fn set_item_complete(&self, id: String, completed: bool) {
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
             let class_name = if completed { "completed" } else { "" };
             list_item.set_class_name(String::from(class_name));
@@ -273,15 +256,13 @@ impl View {
     }
 
     /// Bring an item out of edit mode.
-    pub fn edit_item_done(&self, id: String, title: String) {
-        let list_item = Element::qs(&format!("[data-id=\"{}\"]", id));
-
+    fn edit_item_done(&self, id: String, title: String) {
         if let Some(mut list_item) = Element::qs(&format!("[data-id=\"{}\"]", id)) {
             if let Some(input) = list_item.qs_from("input.edit") {
                 list_item.class_list_remove(String::from("editing"));
 
                 if let Some(mut list_item_label) = list_item.qs_from("label") {
-                    list_item_label.set_text_content(title.into());
+                    list_item_label.set_text_content(title);
                 }
 
                 list_item.remove_child(input);
@@ -299,7 +280,7 @@ impl View {
                     let v = input_el.value(); // TODO remove with nll
                     let title = v.trim();
                     if title != "" {
-                        let ref sched = *sched.borrow_mut();
+                        let sched = &(*sched.borrow_mut());
                         sched.add_message(Message::Controller(ControllerMessage::AddItem(
                             String::from(title),
                         )));
@@ -313,7 +294,7 @@ impl View {
     fn bind_remove_completed(&mut self) {
         let sched = self.sched.clone();
         let handler = move |_| {
-            let ref sched = *sched.borrow_mut();
+            let sched = &(*sched.borrow_mut());
             sched.add_message(Message::Controller(ControllerMessage::RemoveCompleted()));
         };
         self.clear_completed.add_event_listener("click", handler);
@@ -327,7 +308,7 @@ impl View {
                     if let Some(input_el) =
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
-                        let ref sched = *sched.borrow_mut();
+                        let sched = &(*sched.borrow_mut());
                         sched.add_message(Message::Controller(ControllerMessage::ToggleAll(
                             input_el.checked(),
                         )));
@@ -344,7 +325,7 @@ impl View {
             move |e: web_sys::Event| {
                 if let Some(target) = e.target() {
                     if let Some(item_id) = item_id(&target) {
-                        let ref sched = *sched.borrow_mut();
+                        let sched = &(*sched.borrow_mut());
                         sched.add_message(Message::Controller(ControllerMessage::RemoveItem(
                             item_id,
                         )));
@@ -366,7 +347,7 @@ impl View {
                         wasm_bindgen::JsCast::dyn_ref::<web_sys::HtmlInputElement>(&target)
                     {
                         if let Some(item_id) = item_id(&target) {
-                            let ref sched = *sched.borrow_mut();
+                            let sched = &(*sched.borrow_mut());
                             sched.add_message(Message::Controller(ControllerMessage::ToggleItem(
                                 item_id,
                                 input_el.checked(),
@@ -398,7 +379,7 @@ impl View {
                                     dbg("calling -a");
                                     // TODO refactor back into fn
                                     // Was: &self.add_message(ControllerMessage::SetPage(hash));
-                                    let ref sched = *sched.borrow_mut();
+                                    let sched = &(*sched.borrow_mut());
                                     dbg("sending -a");
                                     sched.add_message(Message::Controller(
                                         ControllerMessage::EditItemSave(item, input_el.value()),
@@ -452,7 +433,7 @@ impl View {
                             }
 
                             if let Some(item_id) = item_id(&target) {
-                                let ref sched = *sched.borrow_mut();
+                                let sched = &(*sched.borrow_mut());
                                 sched.add_message(Message::Controller(
                                     ControllerMessage::EditItemCancel(item_id),
                                 ));
