@@ -1,10 +1,8 @@
 use store::{ItemList, ItemListTrait};
 
 fn escape_html(val: String) -> String {
-    // TODO escape me!
-    val
+    val.replace('&', "&alt;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot").replace('\'', "&#39;")
 }
-// export const escapeForHTML = s => s.replace(/[&<]/g, c => c === '&' ? '&amp;' : '&lt;');
 
 pub struct Template {}
 

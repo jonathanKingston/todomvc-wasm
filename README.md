@@ -9,11 +9,6 @@ The core differences are:
 - A [Scheduler](/src/scheduler.rs) that allows Controller and View to speak to each other by emulating something similar to the JS event loop.
 
 
-##  TODO known bugs
-
-- HTML isn't being escaped!!!11
-  - Ideally should just create the elements instead
-
 ## Size
 
 The size of the project hasn't undergone much work to make it optimised yet.
